@@ -2,10 +2,10 @@
 window.addEventListener('DOMContentLoaded', () => {
     console.log('DOM loaded, initializing game...');
     
-    // Check if BrotatoGameScene is available
-    if (typeof BrotatoGameScene === 'undefined') {
-        console.error('BrotatoGameScene is not defined! Make sure BrotatoGameScene.js is loaded.');
-        document.body.innerHTML = '<div style="color: white; padding: 20px;">Error: BrotatoGameScene not loaded. Check console for details.</div>';
+    // Check if Player8DirScene is available
+    if (typeof Player8DirScene === 'undefined') {
+        console.error('Player8DirScene is not defined! Make sure Player8DirScene.js is loaded.');
+        document.body.innerHTML = '<div style="color: white; padding: 20px;">Error: Player8DirScene not loaded. Check console for details.</div>';
         return;
     }
     
@@ -17,7 +17,7 @@ window.addEventListener('DOMContentLoaded', () => {
     }
     
     console.log('Phaser version:', Phaser.VERSION);
-    console.log('Creating game with BrotatoGameScene...');
+    console.log('Creating game with Player8DirScene...');
     
     // Game configuration
     const config = {
@@ -33,7 +33,7 @@ window.addEventListener('DOMContentLoaded', () => {
                 debug: false
             }
         },
-        scene: [BrotatoGameScene]
+        scene: [Player8DirScene]
     };
     
     // Initialize the game

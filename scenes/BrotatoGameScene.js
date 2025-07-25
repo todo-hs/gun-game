@@ -37,10 +37,61 @@ class BrotatoGameScene extends Phaser.Scene {
     }
 
     preload() {
+        // Load sprite sheets
+        this.load.spritesheet('cat', './assets/sprites/cat_spritesheet.png', {
+            frameWidth: 48,
+            frameHeight: 48
+        });
+        
         // Create placeholder sprites for now
         this.createPlaceholders();
     }
 
+    createAnimations() {
+        // Create animations for cat movement
+        if (this.textures.exists('cat')) {
+            // Up animation (Row 1: frames 0-3)
+            this.anims.create({
+                key: 'cat_up',
+                frames: this.anims.generateFrameNumbers('cat', { start: 0, end: 3 }),
+                frameRate: 8,
+                repeat: -1
+            });
+            
+            // Right animation (Row 2: frames 4-7)
+            this.anims.create({
+                key: 'cat_right',
+                frames: this.anims.generateFrameNumbers('cat', { start: 4, end: 7 }),
+                frameRate: 8,
+                repeat: -1
+            });
+            
+            // Down animation (Row 3: frames 8-11)
+            this.anims.create({
+                key: 'cat_down',
+                frames: this.anims.generateFrameNumbers('cat', { start: 8, end: 11 }),
+                frameRate: 8,
+                repeat: -1
+            });
+            
+            // Left animation (Row 4: frames 12-15)
+            this.anims.create({
+                key: 'cat_left',
+                frames: this.anims.generateFrameNumbers('cat', { start: 12, end: 15 }),
+                frameRate: 8,
+                repeat: -1
+            });
+            
+            // Idle animation (use first frame of down)
+            this.anims.create({
+                key: 'cat_idle',
+                frames: [ { key: 'cat', frame: 8 } ],
+                frameRate: 1,
+                repeat: 0
+            });
+        }
+    }
+    
     createPlaceholders() {
         // Player sprite (potato shape)
         const graphics = this.add.graphics();
@@ -88,16 +139,25 @@ class BrotatoGameScene extends Phaser.Scene {
     }
 
     create() {
+        // Create animations for cat sprite
+        this.createAnimations();
+        
         // Create groups
         this.bullets = this.physics.add.group();
         this.enemies = this.physics.add.group();
         this.experienceOrbs = this.physics.add.group();
         this.materials = this.physics.add.group();
         
-        // Create player
-        this.player = this.physics.add.sprite(640, 360, 'player_temp');
+        // Create player - try to use cat sprite, fallback to placeholder
+        const playerTexture = this.textures.exists('cat') ? 'cat' : 'player_temp';
+        this.player = this.physics.add.sprite(640, 360, playerTexture);
         this.player.setCollideWorldBounds(true);
-        this.player.body.setSize(20, 20);
+        this.player.body.setSize(30, 30);
+        
+        // Set initial animation
+        if (playerTexture === 'cat') {
+            this.player.play('cat_down');
+        }
         
         // Add initial weapon
         this.addWeapon({
@@ -147,21 +207,64 @@ class BrotatoGameScene extends Phaser.Scene {
 
     handleMovement() {
         const velocity = new Phaser.Math.Vector2(0, 0);
+        let isMoving = false;
         
-        if (this.wasd.A.isDown) velocity.x = -1;
-        if (this.wasd.D.isDown) velocity.x = 1;
-        if (this.wasd.W.isDown) velocity.y = -1;
-        if (this.wasd.S.isDown) velocity.y = 1;
+        if (this.wasd.A.isDown) {
+            velocity.x = -1;
+            isMoving = true;
+        }
+        if (this.wasd.D.isDown) {
+            velocity.x = 1;
+            isMoving = true;
+        }
+        if (this.wasd.W.isDown) {
+            velocity.y = -1;
+            isMoving = true;
+        }
+        if (this.wasd.S.isDown) {
+            velocity.y = 1;
+            isMoving = true;
+        }
         
         velocity.normalize().scale(this.playerStats.speed);
         this.player.setVelocity(velocity.x, velocity.y);
         
-        // Face mouse direction
-        const angle = Phaser.Math.Angle.Between(
-            this.player.x, this.player.y,
-            this.mousePointer.worldX, this.mousePointer.worldY
-        );
-        this.player.setRotation(angle);
+        // Update animation based on movement direction
+        if (this.textures.exists('cat')) {
+            if (isMoving) {
+                // Determine primary direction
+                if (Math.abs(velocity.x) > Math.abs(velocity.y)) {
+                    // Horizontal movement is dominant
+                    if (velocity.x > 0) {
+                        this.player.play('cat_right', true);
+                    } else {
+                        this.player.play('cat_left', true);
+                    }
+                } else {
+                    // Vertical movement is dominant
+                    if (velocity.y > 0) {
+                        this.player.play('cat_down', true);
+                    } else {
+                        this.player.play('cat_up', true);
+                    }
+                }
+            } else {
+                // Not moving - play idle
+                if (this.player.anims.isPlaying && this.player.anims.currentAnim.key !== 'cat_idle') {
+                    this.player.play('cat_idle');
+                }
+            }
+            
+            // Don't rotate the sprite when using animations
+            this.player.setRotation(0);
+        } else {
+            // Face mouse direction for placeholder sprite
+            const angle = Phaser.Math.Angle.Between(
+                this.player.x, this.player.y,
+                this.mousePointer.worldX, this.mousePointer.worldY
+            );
+            this.player.setRotation(angle);
+        }
     }
 
     addWeapon(weaponData) {

@@ -43,6 +43,16 @@ class BrotatoGameScene extends Phaser.Scene {
             frameHeight: 48
         });
         
+        // Debug: Check if image loads
+        this.load.on('complete', () => {
+            console.log('All assets loaded');
+            console.log('Cat texture exists:', this.textures.exists('cat'));
+        });
+        
+        this.load.on('loaderror', (file) => {
+            console.error('Error loading:', file.src);
+        });
+        
         // Create placeholder sprites for now
         this.createPlaceholders();
     }

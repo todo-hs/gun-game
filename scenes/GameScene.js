@@ -37,11 +37,46 @@ class GameScene extends Phaser.Scene {
     }
 
     preload() {
-        // Load sprites from files
+        // Create colored placeholder sprites if images fail to load
+        this.createPlaceholderSprites();
+        
+        // Try to load sprites from files
         this.load.image('player', './assets/sprites/player.png');
         this.load.image('enemy', './assets/sprites/enemy.png');
         this.load.image('bullet', './assets/sprites/bullet.png');
         this.load.image('exp', './assets/sprites/exp.png');
+    }
+    
+    createPlaceholderSprites() {
+        // Create visible colored rectangles as fallback sprites
+        
+        // Player sprite (orange square)
+        const playerGraphics = this.add.graphics();
+        playerGraphics.fillStyle(0xff6600);
+        playerGraphics.fillRect(0, 0, 32, 32);
+        playerGraphics.generateTexture('player_placeholder', 32, 32);
+        playerGraphics.destroy();
+        
+        // Enemy sprite (red square)
+        const enemyGraphics = this.add.graphics();
+        enemyGraphics.fillStyle(0xff0000);
+        enemyGraphics.fillRect(0, 0, 24, 24);
+        enemyGraphics.generateTexture('enemy_placeholder', 24, 24);
+        enemyGraphics.destroy();
+        
+        // Bullet sprite (yellow circle)
+        const bulletGraphics = this.add.graphics();
+        bulletGraphics.fillStyle(0xffff00);
+        bulletGraphics.fillCircle(4, 4, 4);
+        bulletGraphics.generateTexture('bullet_placeholder', 8, 8);
+        bulletGraphics.destroy();
+        
+        // Experience orb sprite (green circle)
+        const expGraphics = this.add.graphics();
+        expGraphics.fillStyle(0x00ff00);
+        expGraphics.fillCircle(8, 8, 8);
+        expGraphics.generateTexture('exp_placeholder', 16, 16);
+        expGraphics.destroy();
     }
 
     create() {
@@ -50,9 +85,14 @@ class GameScene extends Phaser.Scene {
         this.bullets = this.physics.add.group();
         this.experienceOrbs = this.physics.add.group();
         
-        // Create player at center
-        this.player = this.physics.add.sprite(640, 360, 'player');
+        // Create player at center - use placeholder if original fails
+        const playerTexture = this.textures.exists('player') ? 'player' : 'player_placeholder';
+        this.player = this.physics.add.sprite(640, 360, playerTexture);
         this.player.setCollideWorldBounds(true);
+        this.player.setOrigin(0.5, 0.5);
+        
+        console.log('Player created at:', this.player.x, this.player.y);
+        console.log('Player texture:', playerTexture);
         
         // Setup input
         this.setupInput();
@@ -64,7 +104,7 @@ class GameScene extends Phaser.Scene {
         
         // Start enemy spawning
         this.enemySpawnTimer = this.time.addEvent({
-            delay: 5000,
+            delay: 3000, // Spawn enemies every 3 seconds
             callback: this.spawnEnemy,
             callbackScope: this,
             loop: true
@@ -75,6 +115,8 @@ class GameScene extends Phaser.Scene {
         
         // Setup UI
         this.setupUI();
+        
+        console.log('Game scene created successfully');
     }
 
     update(time, delta) {
@@ -130,7 +172,9 @@ class GameScene extends Phaser.Scene {
     
     fire() {
         const angle = this.player.rotation;
-        const bullet = this.bullets.create(this.player.x, this.player.y, 'bullet');
+        const bulletTexture = this.textures.exists('bullet') ? 'bullet' : 'bullet_placeholder';
+        const bullet = this.bullets.create(this.player.x, this.player.y, bulletTexture);
+        bullet.setOrigin(0.5, 0.5);
         
         const velocity = new Phaser.Math.Vector2(
             Math.cos(angle) * this.bulletSpeed,
@@ -140,7 +184,9 @@ class GameScene extends Phaser.Scene {
         
         // Clean up bullets that go off-screen
         bullet.setData('lifespan', 3000);
-        this.time.delayedCall(3000, () => bullet.destroy());
+        this.time.delayedCall(3000, () => {
+            if (bullet && bullet.active) bullet.destroy();
+        });
     }
     
     spawnEnemy() {
@@ -166,10 +212,14 @@ class GameScene extends Phaser.Scene {
                 break;
         }
         
-        const enemy = this.enemies.create(x, y, 'enemy');
+        const enemyTexture = this.textures.exists('enemy') ? 'enemy' : 'enemy_placeholder';
+        const enemy = this.enemies.create(x, y, enemyTexture);
+        enemy.setOrigin(0.5, 0.5);
         enemy.setData('hp', 10);
         enemy.setData('speed', 80);
         enemy.setData('damage', 10);
+        
+        console.log('Enemy spawned at:', x, y, 'with texture:', enemyTexture);
     }
     
     updateEnemies() {
@@ -196,7 +246,9 @@ class GameScene extends Phaser.Scene {
         const hp = enemy.getData('hp') - this.bulletDamage;
         if (hp <= 0) {
             // Drop experience
-            const exp = this.experienceOrbs.create(enemy.x, enemy.y, 'exp');
+            const expTexture = this.textures.exists('exp') ? 'exp' : 'exp_placeholder';
+            const exp = this.experienceOrbs.create(enemy.x, enemy.y, expTexture);
+            exp.setOrigin(0.5, 0.5);
             exp.setData('value', 1);
             
             enemy.destroy();
@@ -204,7 +256,9 @@ class GameScene extends Phaser.Scene {
             enemy.setData('hp', hp);
             // Flash effect
             enemy.setTint(0xffffff);
-            this.time.delayedCall(100, () => enemy.clearTint());
+            this.time.delayedCall(100, () => {
+                if (enemy && enemy.active) enemy.clearTint();
+            });
         }
     }
     
@@ -250,11 +304,12 @@ class GameScene extends Phaser.Scene {
     }
     
     showUpgradePanel() {
-        // Create simple upgrade panel
+        // Create simple upgrade panel with orange theme
         const panel = this.add.rectangle(640, 360, 600, 400, 0x000000, 0.9);
+        panel.setStrokeStyle(4, 0xff6600);
         const title = this.add.text(640, 200, 'レベルアップ！', {
             fontSize: '32px',
-            color: '#ffffff'
+            color: '#ff6600'
         }).setOrigin(0.5);
         
         const upgrades = [
@@ -272,24 +327,31 @@ class GameScene extends Phaser.Scene {
             selected.push(upgrades.splice(index, 1)[0]);
         }
         
-        // Create buttons
+        // Create buttons with orange theme
+        const panelElements = [panel, title];
         selected.forEach((upgrade, i) => {
             const y = 300 + i * 80;
             const button = this.add.rectangle(640, y, 400, 60, 0x333333);
+            button.setStrokeStyle(2, 0xff6600);
             const text = this.add.text(640, y, upgrade.text, {
                 fontSize: '20px',
                 color: '#ffffff'
             }).setOrigin(0.5);
             
+            panelElements.push(button, text);
+            
             button.setInteractive();
-            button.on('pointerover', () => button.setFillStyle(0x555555));
-            button.on('pointerout', () => button.setFillStyle(0x333333));
+            button.on('pointerover', () => {
+                button.setFillStyle(0xff6600);
+                button.setAlpha(0.8);
+            });
+            button.on('pointerout', () => {
+                button.setFillStyle(0x333333);
+                button.setAlpha(1);
+            });
             button.on('pointerdown', () => {
                 upgrade.effect();
-                panel.destroy();
-                title.destroy();
-                button.destroy();
-                text.destroy();
+                panelElements.forEach(element => element.destroy());
                 this.isPaused = false;
                 this.physics.resume();
             });
@@ -297,10 +359,16 @@ class GameScene extends Phaser.Scene {
     }
     
     setupUI() {
-        const style = { fontSize: '18px', color: '#ffffff' };
+        const style = { fontSize: '18px', color: '#ff6600', fontWeight: 'bold', stroke: '#000000', strokeThickness: 2 };
         this.levelText = this.add.text(10, 10, 'Level: 1', style);
         this.expText = this.add.text(10, 35, 'EXP: 0 / 10', style);
         this.hpText = this.add.text(10, 60, 'HP: 100', style);
+        
+        // Add controls instruction
+        const controlsText = this.add.text(10, 100, 'WASD: 移動  マウス: 照準  自動射撃', {
+            fontSize: '14px',
+            color: '#cccccc'
+        });
     }
     
     updateUI() {

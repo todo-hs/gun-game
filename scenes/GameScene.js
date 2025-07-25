@@ -346,3 +346,8 @@ class ExperienceOrb extends Phaser.Physics.Arcade.Sprite {
         // Experience orb implementation will go here
     }
 }
+
+// Export for module usage (if needed)
+if (typeof module !== 'undefined' && module.exports) {
+    module.exports = GameScene;
+}

@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Debug - Twin-Stick Survivor</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            background-color: #0a0a0a;
+            color: white;
+            font-family: monospace;
+        }
+        #log {
+            white-space: pre-wrap;
+            background: #1a1a1a;
+            padding: 20px;
+            border: 1px solid #333;
+        }
+    </style>
+</head>
+<body>
+    <h1>Debug Log</h1>
+    <div id="log"></div>
+    
+    <script>
+        const log = document.getElementById('log');
+        const addLog = (msg) => {
+            log.textContent += msg + '\n';
+            console.log(msg);
+        };
+
+        addLog('Starting debug...');
+        
+        // Test Phaser loading
+        const script1 = document.createElement('script');
+        script1.src = 'https://cdn.jsdelivr.net/npm/phaser@3.70.0/dist/phaser.min.js';
+        script1.onload = () => {
+            addLog('✓ Phaser loaded successfully');
+            addLog('Phaser version: ' + Phaser.VERSION);
+            
+            // Test GameScene loading
+            const script2 = document.createElement('script');
+            script2.src = './scenes/GameScene.js';
+            script2.onload = () => {
+                addLog('✓ GameScene.js loaded');
+                
+                // Test main.js loading
+                const script3 = document.createElement('script');
+                script3.src = './main.js';
+                script3.onload = () => {
+                    addLog('✓ main.js loaded');
+                    addLog('Game should be running now');
+                };
+                script3.onerror = (e) => addLog('✗ Error loading main.js: ' + e);
+                document.head.appendChild(script3);
+            };
+            script2.onerror = (e) => addLog('✗ Error loading GameScene.js: ' + e);
+            document.head.appendChild(script2);
+        };
+        script1.onerror = (e) => addLog('✗ Error loading Phaser: ' + e);
+        document.head.appendChild(script1);
+        
+        // Catch any global errors
+        window.onerror = (msg, source, lineno, colno, error) => {
+            addLog(`✗ Global error: ${msg}\n  Source: ${source}:${lineno}:${colno}\n  ${error?.stack || ''}`);
+        };
+    </script>
+</body>
+</html>

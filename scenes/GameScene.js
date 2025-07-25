@@ -37,11 +37,11 @@ class GameScene extends Phaser.Scene {
     }
 
     preload() {
-        // Create simple colored rectangles as sprites
-        this.load.image('player', 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==');
-        this.load.image('enemy', 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==');
-        this.load.image('bullet', 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==');
-        this.load.image('exp', 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==');
+        // Load sprites from files
+        this.load.image('player', './assets/sprites/player.png');
+        this.load.image('enemy', './assets/sprites/enemy.png');
+        this.load.image('bullet', './assets/sprites/bullet.png');
+        this.load.image('exp', './assets/sprites/exp.png');
     }
 
     create() {
@@ -52,8 +52,6 @@ class GameScene extends Phaser.Scene {
         
         // Create player at center
         this.player = this.physics.add.sprite(640, 360, 'player');
-        this.player.setTint(0x00ff00);
-        this.player.setDisplaySize(32, 32);
         this.player.setCollideWorldBounds(true);
         
         // Setup input
@@ -133,8 +131,6 @@ class GameScene extends Phaser.Scene {
     fire() {
         const angle = this.player.rotation;
         const bullet = this.bullets.create(this.player.x, this.player.y, 'bullet');
-        bullet.setTint(0xffff00);
-        bullet.setDisplaySize(8, 8);
         
         const velocity = new Phaser.Math.Vector2(
             Math.cos(angle) * this.bulletSpeed,
@@ -171,8 +167,6 @@ class GameScene extends Phaser.Scene {
         }
         
         const enemy = this.enemies.create(x, y, 'enemy');
-        enemy.setTint(0xff0000);
-        enemy.setDisplaySize(24, 24);
         enemy.setData('hp', 10);
         enemy.setData('speed', 80);
         enemy.setData('damage', 10);
@@ -203,8 +197,6 @@ class GameScene extends Phaser.Scene {
         if (hp <= 0) {
             // Drop experience
             const exp = this.experienceOrbs.create(enemy.x, enemy.y, 'exp');
-            exp.setTint(0x0088ff);
-            exp.setDisplaySize(16, 16);
             exp.setData('value', 1);
             
             enemy.destroy();
@@ -212,7 +204,7 @@ class GameScene extends Phaser.Scene {
             enemy.setData('hp', hp);
             // Flash effect
             enemy.setTint(0xffffff);
-            this.time.delayedCall(100, () => enemy.setTint(0xff0000));
+            this.time.delayedCall(100, () => enemy.clearTint());
         }
     }
     
@@ -221,7 +213,7 @@ class GameScene extends Phaser.Scene {
         
         // Flash effect
         player.setTint(0xff0000);
-        this.time.delayedCall(200, () => player.setTint(0x00ff00));
+        this.time.delayedCall(200, () => player.clearTint());
         
         // Knockback
         const angle = Phaser.Math.Angle.Between(enemy.x, enemy.y, player.x, player.y);

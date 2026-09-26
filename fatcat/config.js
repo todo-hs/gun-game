@@ -6,37 +6,89 @@ const FC = {
     TILE: 32,
     START_WEIGHT: 3,
     MIN_WEIGHT: 1,
-    FIRE_INTERVAL: 0.28,
     SPIT_INTERVAL: 0.17,
+    SPIT_JET: 380,
     STUCK_TIME: 3.5,
+    FRAGILE_LIMIT: 10,
+    BOX_BREAK: 25,
+    ROLL_WEIGHT: 40,
+    BURST_WARN: 85,
+    BURST_WEIGHT: 100,
 
     // 体重(kg) → 当たり判定の直径(px)。1マス = 32px
     diameter: w => 10 + 3 * w,
-    speed: w => Math.max(70, 240 - 5 * w),
+    speed: w => Math.max(80, 240 - 5 * w),
+    // 太るほど止まれない（大きいほど滑る）
+    grip: w => (w < 20 ? 30 : Math.max(1.2, 30 * Math.pow(0.9, w - 20))),
     bulletDamage: w => 4 + w,
     bulletScale: w => Math.min(3, 0.8 + w * 0.05),
     spitAmount: w => Math.max(1, Math.round(w * 0.12 * 10) / 10),
     // n マス幅の穴を通れる最大体重
     maxWeightForTiles: n => Math.floor(((n * 32 - 10) / 3 - 0.01) * 10) / 10,
 
+    // 体重で武器が進化する
+    WEAPONS: [
+        { min: 0,  name: 'ピストル',     interval: 0.28, pellets: 1, spread: 0.05, dmgMul: 1,    speed: 620 },
+        { min: 8,  name: 'ショットガン', interval: 0.5,  pellets: 5, spread: 0.55, dmgMul: 0.7,  speed: 600 },
+        { min: 18, name: 'マシンガン',   interval: 0.08, pellets: 1, spread: 0.18, dmgMul: 0.55, speed: 700 },
+        { min: 35, name: '魚ロケット',   interval: 0.55, pellets: 1, spread: 0.08, dmgMul: 2.5,  speed: 430, rocket: true }
+    ],
+    weaponTier(w) {
+        let t = 0;
+        this.WEAPONS.forEach((wp, i) => { if (w >= wp.min) t = i; });
+        return t;
+    },
+
     ENEMIES: {
-        mouse:  { tex: 'fc_mouse',  size: 14,  hp: 8,   speed: 115, eat: 0.6, drop: 0.5, dmg: 0 },
-        dog:    { tex: 'fc_dog',    size: 40,  hp: 45,  speed: 95,  eat: 3,   drop: 2,   dmg: 2 },
-        bigdog: { tex: 'fc_bigdog', size: 72,  hp: 130, speed: 80,  eat: 6,   drop: 4,   dmg: 3.5 },
-        boss:   { tex: 'fc_boss',   size: 150, hp: 700, speed: 70,  eat: 20,  drop: 0,   dmg: 5 }
+        mouse:  { tex: 'fc_mouse',  size: 14,  hp: 8,    speed: 115, eat: 0.6, drop: 0.5, dmg: 0 },
+        dog:    { tex: 'fc_dog',    size: 40,  hp: 45,   speed: 95,  eat: 3,   drop: 2,   dmg: 2 },
+        bigdog: { tex: 'fc_bigdog', size: 72,  hp: 130,  speed: 80,  eat: 6,   drop: 4,   dmg: 3.5 },
+        boss:   { tex: 'fc_boss',   size: 150, hp: 700,  speed: 70,  eat: 20,  drop: 0,   dmg: 5, boss: true },
+        // ルンバは魚を吸って大きくなる（テクスチャ 300px、当たり半径 130 を基準にスケール）
+        roomba: { tex: 'fc_roomba', size: 180, hp: 3000, speed: 55,  eat: 15,  drop: 0,   dmg: 8, boss: true, bodyR: 130, maxSize: 260 }
     },
 
     DEATHS: {
-        stuck:  ['詰まって死亡', '猫は液体じゃなかった'],
-        vacuum: ['掃除機に吸われた', 'ゴミとして処理されました'],
-        thin:   ['痩せすぎて消滅', '吐きすぎ注意'],
-        eaten:  ['かじられ尽くした', '犬のおやつになった'],
-        door:   ['ドアに挟まれた', '体重計はウソをつかない']
+        stuck:  '詰まって死亡',
+        vacuum: '掃除機に吸われた',
+        thin:   '痩せすぎて消滅',
+        eaten:  'かじられ尽くした',
+        door:   'ドアに挟まれた',
+        fall:   '床が抜けた',
+        burst:  '食べすぎて破裂'
+    }
+};
+
+// 天の声（実況のツッコミ役）
+const NARRATOR = {
+    stuck:  ['猫は液体、という説は否定されました', '穴の中で食べるな。何度言えば', 'ぴったりサイズでした', '詰まる猫、初めて見た'],
+    vacuum: ['吸引力の変わらない、ただひとつの掃除機', '今日は燃えるゴミの日でした', 'ゴミとして処理されました'],
+    thin:   ['吐きすぎて毛玉になった', 'ダイエット大成功（死亡）', '猫、消滅'],
+    eaten:  ['犬の方がデカかった', '犬のおやつになった', '体格差を考えろ'],
+    door:   ['体重計はウソをつかない', 'ドアは閉まるものです'],
+    fall:   ['床「重い」', '体重を考えろ', '床が泣いていた'],
+    burst:  ['食べすぎで破裂。当然の結果', '「おいしかった」が最後の言葉', '100kgの壁は越えられなかった'],
+    stuckStart: ['あ、詰まった', 'はい詰まった', 'また詰まってる'],
+    clear:  ['よく痩せた', 'デブの勝利', 'ごちそうさまでした', '今の、たまたまでしょ'],
+    start:  ['さあ、食え', '今日のテーマ：食べすぎ注意', '健康診断の前日です'],
+    milestones: [
+        [20, 'デブの自覚が芽生えた'],
+        [35, 'ロケット猫、誕生'],
+        [50, 'もはや猫ではない'],
+        [70, '体重計が逃げ出した'],
+        [85, 'パンパンです。破裂注意']
+    ],
+    pick(list) {
+        return list[Math.floor(Math.random() * list.length)];
+    },
+    death(reason, deaths) {
+        if (deaths > 0 && deaths % 10 === 0) return `${deaths}回目の死。もはや芸`;
+        return this.pick(this[reason] || ['死んだ']);
     }
 };
 
 const Save = {
-    data: { unlocked: 0, deaths: 0, best: {} },
+    data: { unlocked: 0, deaths: 0, best: {}, maxWeight: 0 },
     load() {
         try {
             const raw = localStorage.getItem('fatcat_save');
@@ -110,6 +162,12 @@ const SFX = {
                 case 'pop': this.tone(200, 1200, 0.12, 'sine', 0.1); break;
                 case 'gate': this.tone(500, 500, 0.08, 'square', 0.05); this.tone(750, 750, 0.12, 'square', 0.05, 0.09); break;
                 case 'die': this.tone(420, 50, 0.7, 'sawtooth', 0.1); break;
+                case 'boom': this.noise(0.5, 0.18); this.tone(120, 30, 0.5, 'sawtooth', 0.12); break;
+                case 'crack': this.noise(0.08, 0.1); this.tone(900, 300, 0.08, 'square', 0.03); break;
+                case 'fall': this.tone(700, 60, 0.9, 'sine', 0.1); break;
+                case 'jet': this.noise(0.2, 0.06); break;
+                case 'warn': this.tone(90, 70, 0.12, 'sine', 0.15); break;
+                case 'evolve': [392, 523, 659].forEach((f, i) => this.tone(f, f * 1.5, 0.1, 'square', 0.05, i * 0.07)); break;
                 case 'clear':
                     [523, 659, 784, 1046].forEach((f, i) => this.tone(f, f, 0.14, 'square', 0.06, i * 0.1));
                     break;

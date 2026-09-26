@@ -3,30 +3,35 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Twin-Stick Survivor</title>
+    <title>デブ猫ガンナー 〜太るほど強い。でも穴に詰まる。〜</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@700&display=swap" rel="stylesheet">
     <style>
-        body {
+        html, body {
             margin: 0;
             padding: 0;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            min-height: 100vh;
+            width: 100%;
+            height: 100%;
             background-color: #0a0a0a;
-            font-family: Arial, sans-serif;
+            overflow: hidden;
         }
         #game-container {
-            position: relative;
+            width: 100%;
+            height: 100%;
         }
     </style>
 </head>
 <body>
     <div id="game-container"></div>
-    
+
     <script src="https://cdn.jsdelivr.net/npm/phaser@3.70.0/dist/phaser.min.js"></script>
-    <script src="./scenes/GameScene.js"></script>
-    <script src="./scenes/BrotatoGameScene.js"></script>
-    <script src="./scenes/Player8DirScene.js"></script>
-    <script src="./main.js"></script>
+    <script src="./fatcat/config.js"></script>
+    <script src="./fatcat/levels.js"></script>
+    <script src="./fatcat/BootScene.js"></script>
+    <script src="./fatcat/TitleScene.js"></script>
+    <script src="./fatcat/GameScene.js"></script>
+    <script src="./fatcat/HudScene.js"></script>
+    <script src="./fatcat/main.js"></script>
 </body>
 </html>

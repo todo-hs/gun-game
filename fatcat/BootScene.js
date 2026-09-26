@@ -15,6 +15,7 @@ class BootScene extends Phaser.Scene {
         this.drawDog(g, 'fc_boss', 180, 0x8d7b9a, 0x4a3d55, true);
         this.drawFish(g, 'fc_fish', 0x2a6fa8, 0x4fa3e0, 0xbfe3ff);
         this.drawFish(g, 'fc_fish_gold', 0xc98a00, 0xffc93c, 0xfff1b8);
+        this.drawRoomba(g);
         this.drawHairball(g);
         this.drawBullet(g);
         this.drawHouse(g);
@@ -152,6 +153,44 @@ class BootScene extends Phaser.Scene {
         g.generateTexture(key, S, S);
     }
 
+    drawRoomba(g) {
+        g.clear();
+        const c = 150;
+        g.fillStyle(0x111111);
+        g.fillCircle(c, c, 134);
+        g.fillStyle(0x3a3a44);
+        g.fillCircle(c, c, 128);
+        g.fillStyle(0x55555f);
+        g.fillCircle(c, c, 100);
+        // 前のバンパー
+        g.lineStyle(14, 0x222228);
+        g.beginPath();
+        g.arc(c, c, 120, -1.1, 1.1);
+        g.strokePath();
+        // ボタンと怒った目
+        g.fillStyle(0x222228);
+        g.fillCircle(c, c, 30);
+        g.fillStyle(0x3fdc7f);
+        g.fillCircle(c, c, 10);
+        g.fillStyle(0xff2244);
+        g.fillEllipse(c + 55, c - 38, 34, 22);
+        g.fillEllipse(c + 55, c + 38, 34, 22);
+        g.fillStyle(0xffffff);
+        g.fillCircle(c + 60, c - 38, 5);
+        g.fillCircle(c + 60, c + 38, 5);
+        g.lineStyle(8, 0x111111);
+        g.lineBetween(c + 30, c - 62, c + 76, c - 44);
+        g.lineBetween(c + 30, c + 62, c + 76, c + 44);
+        // ブラシ
+        g.lineStyle(4, 0xbbbbbb);
+        for (let i = 0; i < 6; i++) {
+            const a = (i / 6) * Math.PI * 2;
+            g.lineBetween(c + 95, c - 95, c + 95 + Math.cos(a) * 26, c - 95 + Math.sin(a) * 26);
+            g.lineBetween(c + 95, c + 95, c + 95 + Math.cos(a) * 26, c + 95 + Math.sin(a) * 26);
+        }
+        g.generateTexture('fc_roomba', 300, 300);
+    }
+
     drawFish(g, key, dark, body, belly) {
         g.clear();
         g.fillStyle(dark);
@@ -253,7 +292,38 @@ class BootScene extends Phaser.Scene {
         // 4: 床（市松）
         g.fillStyle(0x2e2640);
         g.fillRect(T * 4, 0, T, T);
-        g.generateTexture('fc_tiles', T * 5, T);
+        // 5: 薄い床
+        g.fillStyle(0x4a3a2a);
+        g.fillRect(T * 5, 0, T, T);
+        g.fillStyle(0x6b5540);
+        g.fillRect(T * 5 + 1, 1, T - 2, T - 2);
+        g.lineStyle(1, 0x2a1f15);
+        g.lineBetween(T * 5 + 4, 6, T * 5 + 14, 14);
+        g.lineBetween(T * 5 + 14, 14, T * 5 + 26, 10);
+        g.lineBetween(T * 5 + 14, 14, T * 5 + 18, 28);
+        // 6: 穴
+        g.fillStyle(0x000000);
+        g.fillRect(T * 6, 0, T, T);
+        g.fillStyle(0x140f1c);
+        g.fillRect(T * 6, 0, T, 5);
+        // 7: 段ボール
+        g.fillStyle(0x8a6436);
+        g.fillRect(T * 7, 0, T, T);
+        g.fillStyle(0xc49a5c);
+        g.fillRect(T * 7 + 2, 2, T - 4, T - 4);
+        g.fillStyle(0xe8d9a8);
+        g.fillRect(T * 7 + 13, 2, 6, T - 4);
+        g.lineStyle(2, 0x8a6436);
+        g.lineBetween(T * 7 + 4, 24, T * 7 + 10, 28);
+        // 8: ひび割れ中の床
+        g.fillStyle(0x6b2a2a);
+        g.fillRect(T * 8, 0, T, T);
+        g.lineStyle(2, 0x000000);
+        g.lineBetween(T * 8 + 2, 4, T * 8 + 16, 16);
+        g.lineBetween(T * 8 + 16, 16, T * 8 + 30, 6);
+        g.lineBetween(T * 8 + 16, 16, T * 8 + 12, 30);
+        g.lineBetween(T * 8 + 16, 16, T * 8 + 28, 26);
+        g.generateTexture('fc_tiles', T * 9, T);
     }
 
     drawDot(g) {

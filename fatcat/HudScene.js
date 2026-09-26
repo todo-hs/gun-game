@@ -12,11 +12,12 @@ class HudScene extends Phaser.Scene {
             fontFamily: FONT, fontSize: `${size}px`, color, fontStyle: 'bold', stroke: '#000000', strokeThickness: 5
         });
 
-        this.add.rectangle(10, 10, 330, 118, 0x000000, 0.55).setOrigin(0);
+        this.add.rectangle(10, 10, 330, 146, 0x000000, 0.55).setOrigin(0);
         this.stageText = this.add.text(22, 18, `STAGE ${this.gs.stageIndex + 1}  ${this.gs.level.name}`, st(18, '#ffd166'));
         this.weightText = this.add.text(22, 44, '', st(34));
+        this.weaponText = this.add.text(22, 90, '', st(18, '#8ecae6'));
         this.holeChips = [1, 2, 3].map((n, i) =>
-            this.add.text(22 + i * 104, 94, '', { fontFamily: FONT, fontSize: '14px', color: '#000', fontStyle: 'bold', padding: { x: 6, y: 3 } })
+            this.add.text(22 + i * 104, 122, '', { fontFamily: FONT, fontSize: '14px', color: '#000', fontStyle: 'bold', padding: { x: 6, y: 3 } })
         );
 
         this.deathText = this.add.text(W - 20, 16, '', st(22)).setOrigin(1, 0);
@@ -29,11 +30,17 @@ class HudScene extends Phaser.Scene {
         ).setOrigin(0.5, 1);
 
         this.stuckText = this.add.text(W / 2, H / 2 - 120, '', st(40, '#ff4d6d')).setOrigin(0.5).setVisible(false);
+        this.burstText = this.add.text(W / 2, 196, '', st(30, '#ff4d6d')).setOrigin(0.5).setVisible(false);
+
+        // 天の声
+        this.narrationBg = this.add.rectangle(W / 2, H - 62, 10, 40, 0x000000, 0.75);
+        this.narrationText = this.add.text(W / 2, H - 62, '', st(24, '#ffffff')).setOrigin(0.5);
+        this.shownNarration = null;
 
         if (this.gs.boss) {
             this.bossBarBg = this.add.rectangle(W / 2, 148, 504, 22, 0x000000, 0.7);
             this.bossBar = this.add.rectangle(W / 2 - 250, 148, 500, 16, 0xd62839).setOrigin(0, 0.5);
-            this.add.text(W / 2, 128, 'ブル太', st(18, '#ff4d6d')).setOrigin(0.5);
+            this.add.text(W / 2, 128, this.gs.level.bossName, st(18, '#ff4d6d')).setOrigin(0.5);
         }
 
         // ステージ開始のタイトル
@@ -58,6 +65,9 @@ class HudScene extends Phaser.Scene {
         const c = gs.cat;
 
         this.weightText.setText(`体重 ${c.w.toFixed(1)} kg`);
+        this.weightText.setColor(c.w >= FC.BURST_WARN ? '#ff4d6d' : '#ffffff');
+        const next = FC.WEAPONS[c.tier + 1];
+        this.weaponText.setText(`武器: ${FC.WEAPONS[c.tier].name}${next ? `（${next.min}kgで進化）` : ''}`);
         const names = ['小穴', '中穴', '大穴'];
         this.holeChips.forEach((chip, i) => {
             const max = FC.maxWeightForTiles(i + 1);
@@ -88,9 +98,29 @@ class HudScene extends Phaser.Scene {
             this.stuckText.setVisible(false);
         }
 
+        const bursting = c.w >= FC.BURST_WARN && gs.state === 'play';
+        this.burstText.setVisible(bursting);
+        if (bursting) {
+            this.burstText.setText(`破裂まで あと ${(FC.BURST_WEIGHT - c.w).toFixed(1)}kg !!`);
+            this.burstText.setScale(1 + Math.sin(this.time.now / 80) * 0.08);
+        }
+
+        const n = gs.narration;
+        if (n && n !== this.shownNarration) {
+            this.shownNarration = n;
+            this.narrationText.setText(`天の声「${n.text}」`);
+            this.narrationBg.width = this.narrationText.width + 40;
+            this.narrationText.setAlpha(1);
+            this.narrationBg.setAlpha(0.75);
+        }
+        const age = n ? gs.time.now - n.at : Infinity;
+        const fade = gs.state === 'play' ? Phaser.Math.Clamp((3500 - age) / 500, 0, 1) : 0;
+        this.narrationText.setAlpha(fade);
+        this.narrationBg.setAlpha(fade * 0.75);
+
         if (this.bossBar) {
             const b = gs.boss;
-            const ratio = b && b.active ? Math.max(0, b.hp / b.def.hp) : 0;
+            const ratio = b && b.active ? Math.max(0, b.hp / b.maxHp) : 0;
             this.bossBar.width = 500 * ratio;
         }
 
@@ -103,7 +133,8 @@ class HudScene extends Phaser.Scene {
 
     showDeath() {
         const W = this.scale.width, H = this.scale.height;
-        const [title, sub] = FC.DEATHS[this.gs.deathReason] || ['死亡', ''];
+        const title = FC.DEATHS[this.gs.deathReason] || '死亡';
+        const sub = `天の声「${this.gs.deathLine}」`;
         const c = this.add.container(W / 2, H / 2).setAlpha(0);
         c.add([
             this.add.rectangle(0, 0, W, 300, 0x000000, 0.8),
@@ -123,7 +154,7 @@ class HudScene extends Phaser.Scene {
             this.add.rectangle(0, 0, W, 300, 0x000000, 0.8),
             this.add.text(0, -90, last ? '完食!! 全ステージクリア' : 'STAGE CLEAR!', { fontFamily: FONT, fontSize: '60px', color: '#ffd166', fontStyle: 'bold', stroke: '#000', strokeThickness: 8 }).setOrigin(0.5),
             this.add.text(0, -16, `TIME ${this.gs.clearTime.toFixed(2)}s${this.gs.newBest ? '  (自己ベスト!)' : ''}   体重 ${this.gs.cat.w.toFixed(1)}kg`, { fontFamily: FONT, fontSize: '26px', color: '#ffffff' }).setOrigin(0.5),
-            this.add.text(0, 36, `ここまでの総死亡 ${Save.data.deaths} 回`, { fontFamily: FONT, fontSize: '22px', color: '#ff9aa8' }).setOrigin(0.5),
+            this.add.text(0, 36, `天の声「${this.gs.narration ? this.gs.narration.text : ''}」   総死亡 ${Save.data.deaths} 回`, { fontFamily: FONT, fontSize: '22px', color: '#ff9aa8' }).setOrigin(0.5),
             this.add.text(0, 96, last ? 'クリックでタイトルへ' : 'クリック / SPACE で次のステージ', { fontFamily: FONT, fontSize: '22px', color: '#bbbbbb' }).setOrigin(0.5)
         ]);
         this.tweens.add({ targets: c, alpha: 1, duration: 300 });

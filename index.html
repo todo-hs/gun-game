@@ -3,35 +3,168 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>デブ猫ガンナー 〜太るほど強い。でも穴に詰まる。〜</title>
+    <title>カモメ、盗み食い。</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@500;800&display=swap" rel="stylesheet">
     <style>
-        html, body {
-            margin: 0;
-            padding: 0;
-            width: 100%;
-            height: 100%;
-            background-color: #0a0a0a;
-            overflow: hidden;
+        :root {
+            --font: "M PLUS Rounded 1c", "Hiragino Maru Gothic ProN", "Yu Gothic", sans-serif;
+            --yellow: #ffd166;
+            --red: #ff4d6d;
+            --green: #3fdc7f;
         }
-        #game-container {
-            width: 100%;
-            height: 100%;
-        }
+        html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background: #a9d8f5; font-family: var(--font); color: #fff; user-select: none; }
+        #view canvas { display: block; }
+        .hidden { display: none !important; }
+        .panel { background: rgba(20, 30, 45, 0.55); border-radius: 12px; padding: 10px 14px; backdrop-filter: blur(4px); }
+        .stroke { text-shadow: 0 2px 0 #000, 0 0 6px rgba(0, 0, 0, 0.8); }
+
+        #hud { position: fixed; inset: 0; pointer-events: none; }
+        #status { position: absolute; left: 16px; top: 16px; min-width: 230px; }
+        #yen { font-size: 40px; font-weight: 800; color: var(--yellow); line-height: 1.1; }
+        #best { font-size: 13px; color: #d8e4ee; }
+        #status .row { font-size: 14px; margin-top: 6px; display: flex; align-items: center; gap: 8px; }
+        #weight { font-weight: 800; min-width: 70px; }
+        #weight.danger { color: var(--red); }
+        .bar { display: inline-block; width: 130px; height: 9px; border-radius: 5px; background: rgba(255,255,255,0.18); overflow: hidden; }
+        .bar > span { display: block; height: 100%; background: var(--green); transition: width 0.15s; }
+        #weight-bar { background: #ffb347; }
+        #weight-bar.danger, #stamina.tired { background: var(--red); }
+        #speed { font-size: 13px; color: #d8e4ee; }
+        #mode { font-size: 15px; color: var(--yellow); font-weight: 800; min-height: 1em; }
+        #timer { position: absolute; top: 12px; left: 50%; transform: translateX(-50%); font-size: 44px; font-weight: 800; }
+        #timer.danger { color: var(--red); animation: pulse 0.5s infinite alternate; }
+        @keyframes pulse { from { transform: translateX(-50%) scale(1); } to { transform: translateX(-50%) scale(1.08); } }
+        #right { position: absolute; right: 16px; top: 16px; width: 310px; display: flex; flex-direction: column; align-items: flex-end; }
+        #minimap { width: 230px; height: 155px; border-radius: 10px; border: 3px solid rgba(255,255,255,0.85); box-shadow: 0 3px 10px rgba(0,0,0,0.35); }
+        #missions { list-style: none; margin: 8px 0 0; padding: 8px 12px; font-size: 13px; width: 100%; box-sizing: border-box; }
+        #missions li { margin: 3px 0; }
+        #missions li.done { color: var(--green); opacity: 0.85; }
+        #carry { position: absolute; top: 76px; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 12px; font-size: 18px; font-weight: 800; color: var(--yellow); white-space: nowrap; }
+        #nest-arrow { width: 0; height: 0; border-top: 14px solid transparent; border-bottom: 14px solid transparent; border-left: 30px solid var(--yellow); filter: drop-shadow(0 2px 0 #000); transform-origin: 10px 50%; }
+        #alert { position: absolute; top: 24%; left: 50%; transform: translateX(-50%); font-size: 38px; font-weight: 800; color: var(--red); white-space: nowrap; }
+        #combo { position: absolute; top: 34%; right: 24%; font-size: 34px; font-weight: 800; color: var(--yellow); opacity: 0; }
+        #combo.pop { animation: combo 1.2s ease forwards; }
+        @keyframes combo { 0% { opacity: 0; transform: scale(0.5); } 15% { opacity: 1; transform: scale(1.2); } 30% { transform: scale(1); } 80% { opacity: 1; } 100% { opacity: 0; } }
+        #narration { position: absolute; bottom: 64px; left: 50%; transform: translateX(-50%); font-size: 22px; font-weight: 800; white-space: nowrap; transition: opacity 0.3s; }
+        #tips { position: absolute; bottom: 10px; left: 50%; transform: translateX(-50%); font-size: 13px; color: #eef4f8; text-align: center; white-space: nowrap; }
+        #banner { position: absolute; top: 38%; left: 0; right: 0; text-align: center; background: rgba(0, 0, 0, 0.45); padding: 16px 0; font-size: 20px; opacity: 0; }
+        #banner .big { font-size: 42px; font-weight: 800; color: var(--yellow); }
+        #banner.fade { animation: banner 2.6s ease forwards; }
+        @keyframes banner { 0% { opacity: 0; } 10% { opacity: 1; } 75% { opacity: 1; } 100% { opacity: 0; } }
+        #speedlines { position: fixed; inset: 0; pointer-events: none; opacity: 0;
+            background: repeating-conic-gradient(from 0deg at 50% 50%, rgba(255,255,255,0.0) 0deg 4deg, rgba(255,255,255,0.35) 4deg 5deg);
+            -webkit-mask-image: radial-gradient(circle at 50% 50%, transparent 38%, black 75%); mask-image: radial-gradient(circle at 50% 50%, transparent 38%, black 75%); }
+        #floaters { position: fixed; inset: 0; pointer-events: none; overflow: hidden; }
+        .floater { position: absolute; left: 0; top: 0; font-weight: 800; white-space: nowrap; text-shadow: 0 2px 0 #000, 0 0 6px #000; }
+
+        .overlay { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+        #title { justify-content: space-between; padding: 36px 0 26px; box-sizing: border-box; pointer-events: none; }
+        #title > * { pointer-events: auto; }
+        #title h1 { margin: 0; font-size: 80px; font-weight: 800; color: #fff; text-shadow: 0 5px 0 #2f6fb0, 0 0 20px rgba(0,0,0,0.4); }
+        #title .sub { font-size: 20px; font-weight: 800; margin-top: 6px; }
+        #title .bottom { display: flex; flex-direction: column; align-items: center; gap: 12px; }
+        .controls { display: grid; grid-template-columns: auto auto; gap: 4px 16px; font-size: 15px; background: rgba(20, 30, 45, 0.6); padding: 12px 20px; border-radius: 12px; }
+        .controls b { color: var(--yellow); }
+        button { font-family: var(--font); font-weight: 800; border: none; border-radius: 10px; cursor: pointer; background: #2f6fb0; color: #fff; padding: 10px 18px; font-size: 16px; box-shadow: 0 4px 0 #1b4270; }
+        button:hover { filter: brightness(1.15); }
+        #title-start { font-size: 30px; padding: 12px 40px; }
+        #title-stats { font-size: 14px; }
+        #result, #pause { background: rgba(0, 0, 0, 0.55); gap: 12px; }
+        #result-title { font-size: 60px; font-weight: 800; color: var(--yellow); }
+        #result-yen { font-size: 34px; font-weight: 800; }
+        #result-rank { font-size: 26px; color: #bfe8ff; font-weight: 800; }
+        #result-stats { font-size: 17px; color: #eee; }
+        #result-missions { font-size: 17px; color: var(--green); text-align: center; }
+        .buttons { display: flex; gap: 12px; margin-top: 8px; }
+        #pause { cursor: pointer; font-size: 28px; font-weight: 800; }
+        #pause small { font-size: 15px; font-weight: 500; color: #d8e4ee; }
+        #loading { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 24px; background: #a9d8f5; color: #1b4270; font-weight: 800; }
+        #other-game { position: fixed; right: 12px; bottom: 10px; font-size: 13px; color: #fff; }
+        #other-game a { color: #fff; }
     </style>
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+            "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+        }
+    }
+    </script>
 </head>
 <body>
-    <div id="game-container"></div>
+    <div id="view"></div>
+    <div id="speedlines"></div>
 
-    <script src="https://cdn.jsdelivr.net/npm/phaser@3.70.0/dist/phaser.min.js"></script>
-    <script src="./fatcat/config.js"></script>
-    <script src="./fatcat/levels.js"></script>
-    <script src="./fatcat/BootScene.js"></script>
-    <script src="./fatcat/TitleScene.js"></script>
-    <script src="./fatcat/GameScene.js"></script>
-    <script src="./fatcat/HudScene.js"></script>
-    <script src="./fatcat/main.js"></script>
+    <div id="hud" class="hidden">
+        <div id="status" class="panel">
+            <div id="yen" class="stroke">¥0</div>
+            <div id="best"></div>
+            <div class="row">体重 <span id="weight">1.00 kg</span><span class="bar"><span id="weight-bar"></span></span></div>
+            <div class="row">羽の体力 <span class="bar"><span id="stamina"></span></span></div>
+            <div id="speed"></div>
+            <div id="mode"></div>
+        </div>
+        <div id="timer" class="stroke">3:00</div>
+        <div id="carry" class="stroke hidden"><div id="nest-arrow"></div><span id="carry-name"></span></div>
+        <div id="right">
+            <canvas id="minimap" width="230" height="155"></canvas>
+            <ul id="missions" class="panel"></ul>
+        </div>
+        <div id="alert" class="stroke hidden"></div>
+        <div id="combo" class="stroke"></div>
+        <div id="banner" class="stroke"></div>
+        <div id="narration" class="stroke"></div>
+        <div id="tips" class="stroke">A 左の翼 / D 右の翼（左で羽ばたくと右に曲がる）/ スペース 両方 / W 下を向く・S 上を向く / Shift 急降下 / F フン / E 鳴く / 矢印キー カメラ / Esc メニュー</div>
+    </div>
+    <div id="floaters"></div>
+
+    <div id="title" class="overlay">
+        <div style="text-align:center">
+            <h1>カモメ、盗み食い。</h1>
+            <div class="sub stroke">観光客の食べ物を空から奪え。食べるほど重くなって、飛べなくなる。5kgで破裂する。</div>
+        </div>
+        <div class="bottom">
+            <div class="controls stroke">
+                <b>A / D</b><span>左の翼 / 右の翼で羽ばたく（左を羽ばたくと右に傾いて右に曲がる）</span>
+                <b>スペース</b><span>両方の翼でまっすぐ上がる</span>
+                <b>W / S</b><span>頭を下げる（加速）/ 上げる（上昇・遅くなると失速）</span>
+                <b>Shift</b><span>翼をたたんで急降下</span>
+                <b>F</b><span>フンを落とす（当たった人は食べ物を落とす）</span>
+                <b>大きい物</b><span>くわえて灯台の巣まで運ぶ。トンビに気をつけろ</span>
+            </div>
+            <button id="title-start">飛び立つ</button>
+            <div id="title-stats" class="stroke"></div>
+            <div class="stroke" style="font-size:13px">実況・動画投稿 大歓迎！　マウスでも遊べます（左クリック 左の翼 / 右クリック 右の翼）</div>
+        </div>
+    </div>
+
+    <div id="result" class="overlay hidden">
+        <div id="result-title" class="stroke"></div>
+        <div id="result-yen" class="stroke"></div>
+        <div id="result-rank" class="stroke"></div>
+        <div id="result-stats" class="stroke"></div>
+        <div id="result-missions" class="stroke"></div>
+        <div class="buttons">
+            <button id="result-retry">もう一回（スペース）</button>
+            <button id="to-title">タイトル</button>
+        </div>
+    </div>
+
+    <div id="pause" class="overlay hidden">
+        一時停止
+        <div class="buttons">
+            <button id="pause-resume">再開</button>
+            <button id="pause-retry">最初から</button>
+            <button id="pause-title">タイトル</button>
+        </div>
+        <small>A / D 左右の翼 / スペース 両方 / W・S 頭の上げ下げ / Shift 急降下 / F フン / E 鳴く / 矢印キー・マウス カメラ / M 音</small>
+    </div>
+
+    <div id="loading">読み込み中…</div>
+    <div id="other-game" class="stroke">前作: <a href="./fatcat/">デブ猫、町内会長になる。</a></div>
+
+    <script type="module" src="./gull/main.js"></script>
 </body>
 </html>

@@ -13,12 +13,15 @@ function makeShellMaterials(map) {
         const k = i / SHELLS;
         const m = new THREE.MeshStandardMaterial({
             map,
+            emissiveMap: map,
+            emissive: 0xffffff,
+            emissiveIntensity: 0.16,
             alphaMap: Tex.furAlpha,
-            alphaTest: 0.2 + 0.75 * k,
+            alphaTest: 0.15 + 0.8 * k,
             roughness: 1,
             side: THREE.FrontSide
         });
-        m.color.setScalar(0.7 + 0.25 * k);
+        m.color.setScalar(0.9 + 0.1 * k);
         const offset = { value: 0 };
         m.userData.offset = offset;
         m.userData.k = k;
@@ -142,11 +145,14 @@ export class CatModel {
         this.body = new THREE.Group(); // 胴体・頭・しっぽ（体の上下動はここ）
         this.root.add(this.body);
 
-        this.bodyMat = new THREE.MeshStandardMaterial({ map: Tex.catBody, roughness: 0.95 });
-        this.headMat = new THREE.MeshStandardMaterial({ map: Tex.catHead, roughness: 0.95 });
-        this.tailMat = new THREE.MeshStandardMaterial({ map: Tex.catTail, roughness: 0.95 });
-        this.legMat = new THREE.MeshStandardMaterial({ color: 0xd98a3d, roughness: 0.95 });
-        this.pawMat = new THREE.MeshStandardMaterial({ color: 0xf6e3c6, roughness: 0.9 });
+        const furMat = map => new THREE.MeshStandardMaterial({ map, emissiveMap: map, emissive: 0xffffff, emissiveIntensity: 0.16, roughness: 0.95 });
+        this.bodyMat = furMat(Tex.catBody);
+        this.headMat = furMat(Tex.catHead);
+        this.tailMat = furMat(Tex.catTail);
+        this.legMat = furMat(Tex.catWhite);
+        this.pawMat = new THREE.MeshStandardMaterial({ color: 0xfbf6ee, roughness: 0.9 });
+        this.earMat = new THREE.MeshStandardMaterial({ color: 0xeeb877, roughness: 0.95 });
+        this.whiteShellMats = makeShellMaterials(Tex.catWhite);
         this.bodyShellMats = makeShellMaterials(Tex.catBody);
         this.headShellMats = makeShellMaterials(Tex.catHead);
         this.tailShellMats = makeShellMaterials(Tex.catTail);
@@ -158,6 +164,12 @@ export class CatModel {
         this.body.add(this.torso);
         this.torsoShells = addShells(this.torso, this.torso.geometry, this.bodyShellMats);
 
+        // 胸のふわふわの飾り毛（長毛種らしさ）
+        const ruffGeo = new THREE.SphereGeometry(1, 28, 20);
+        this.ruff = new THREE.Mesh(ruffGeo, furMat(Tex.catWhite));
+        this.body.add(this.ruff);
+        addShells(this.ruff, ruffGeo, this.whiteShellMats);
+
         // 頭
         this.neck = new THREE.Group();
         this.body.add(this.neck);
@@ -165,7 +177,7 @@ export class CatModel {
         this.neck.add(this.head);
         const headGeo = new THREE.SphereGeometry(1, 40, 28);
         const skull = new THREE.Mesh(headGeo, this.headMat);
-        skull.scale.set(1, 0.9, 1.08);
+        skull.scale.set(0.9, 0.9, 1.15);
         skull.castShadow = true;
         this.head.add(skull);
         addShells(skull, headGeo, this.headShellMats);
@@ -175,15 +187,16 @@ export class CatModel {
         const cream = new THREE.MeshStandardMaterial({ color: 0xfbf1e1, roughness: 0.9 });
         this.ears = [-1, 1].map(s => {
             const ear = new THREE.Group();
-            const outer = new THREE.Mesh(new THREE.ConeGeometry(0.42, 0.75, 16, 1, true), this.legMat);
-            outer.material = this.legMat;
+            const outer = new THREE.Mesh(new THREE.ConeGeometry(0.4, 0.55, 20), this.earMat);
             outer.scale.z = 0.55;
-            const inner = new THREE.Mesh(new THREE.ConeGeometry(0.3, 0.55, 16), pink);
+            const tip = new THREE.Mesh(new THREE.SphereGeometry(0.08, 10, 8), this.earMat);
+            tip.position.y = 0.23;
+            const inner = new THREE.Mesh(new THREE.ConeGeometry(0.28, 0.4, 16), pink);
             inner.scale.z = 0.3;
-            inner.position.set(0.06, -0.05, 0);
-            ear.add(outer, inner);
-            ear.position.set(-0.05, 0.72, s * 0.48);
-            ear.rotation.set(s * 0.32, 0, -0.12);
+            inner.position.set(0.07, -0.04, 0);
+            ear.add(outer, tip, inner);
+            ear.position.set(-0.08, 0.78, s * 0.5);
+            ear.rotation.set(s * 0.45, 0, -0.08);
             this.head.add(ear);
             return ear;
         });
@@ -193,38 +206,40 @@ export class CatModel {
         const shineMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
         this.eyes = [-1, 1].map(s => {
             const eye = new THREE.Group();
-            const ball = new THREE.Mesh(new THREE.SphereGeometry(0.24, 24, 16), irisMat);
-            const pupil = new THREE.Mesh(new THREE.SphereGeometry(0.24, 16, 12), pupilMat);
-            pupil.position.x = 0.012;
-            const shine = new THREE.Mesh(new THREE.SphereGeometry(0.035, 8, 6), shineMat);
-            shine.position.set(0.22, 0.08, -0.06);
-            eye.add(ball, pupil, shine);
-            eye.position.set(0.72, 0.18, s * 0.36);
-            eye.rotation.y = -s * 0.42;
+            const ball = new THREE.Mesh(new THREE.SphereGeometry(0.33, 28, 20), irisMat);
+            const pupil = new THREE.Mesh(new THREE.SphereGeometry(0.33, 20, 14), pupilMat);
+            pupil.position.x = 0.014;
+            const shine = new THREE.Mesh(new THREE.SphereGeometry(0.055, 10, 8), shineMat);
+            shine.position.set(0.3, 0.12, -0.08);
+            const shine2 = new THREE.Mesh(new THREE.SphereGeometry(0.025, 8, 6), shineMat);
+            shine2.position.set(0.31, -0.09, 0.07);
+            eye.add(ball, pupil, shine, shine2);
+            eye.position.set(0.68, 0.1, s * 0.31);
+            eye.rotation.y = -s * 0.16;
             this.head.add(eye);
             return { eye, pupil };
         });
         [-1, 1].forEach(s => {
-            const m = new THREE.Mesh(new THREE.SphereGeometry(0.24, 16, 12), cream);
-            m.position.set(0.8, -0.26, s * 0.15);
+            const m = new THREE.Mesh(new THREE.SphereGeometry(0.21, 16, 12), cream);
+            m.position.set(0.78, -0.3, s * 0.14);
             this.head.add(m);
         });
         const chin = new THREE.Mesh(new THREE.SphereGeometry(0.26, 16, 12), cream);
         chin.scale.set(1, 0.7, 1.2);
-        chin.position.set(0.6, -0.48, 0);
+        chin.position.set(0.6, -0.5, 0);
         this.head.add(chin);
         this.mouth = new THREE.Mesh(new THREE.SphereGeometry(0.14, 12, 8), new THREE.MeshStandardMaterial({ color: 0x5a1a22 }));
-        this.mouth.position.set(0.82, -0.42, 0);
+        this.mouth.position.set(0.8, -0.46, 0);
         this.mouth.scale.set(0.5, 0.01, 1);
         this.head.add(this.mouth);
         const nose = new THREE.Mesh(new THREE.SphereGeometry(0.09, 12, 8), pink);
         nose.scale.set(0.8, 0.6, 1.2);
-        nose.position.set(1.0, -0.1, 0);
+        nose.position.set(0.95, -0.17, 0);
         this.head.add(nose);
         const wp = [];
         [-1, 1].forEach(s => {
             for (let k = 0; k < 3; k++) {
-                wp.push(new THREE.Vector3(0.92, -0.26, s * 0.2), new THREE.Vector3(1.55, -0.2 - k * 0.12, s * (0.85 + k * 0.1)));
+                wp.push(new THREE.Vector3(0.9, -0.3, s * 0.2), new THREE.Vector3(1.5, -0.24 - k * 0.12, s * (0.85 + k * 0.1)));
             }
         });
         this.head.add(new THREE.LineSegments(
@@ -289,8 +304,9 @@ export class CatModel {
 
     setFur(len, headScale) {
         this.bodyShellMats.forEach(m => { m.userData.offset.value = len * m.userData.k; });
-        this.tailShellMats.forEach(m => { m.userData.offset.value = len * 0.9 * m.userData.k; });
-        this.headShellMats.forEach(m => { m.userData.offset.value = (len * 0.7 / headScale) * m.userData.k; });
+        this.tailShellMats.forEach(m => { m.userData.offset.value = len * 1.3 * m.userData.k; });
+        this.whiteShellMats.forEach(m => { m.userData.offset.value = (len * 1.2 / Math.max(0.01, this.ruff.scale.x)) * m.userData.k; });
+        this.headShellMats.forEach(m => { m.userData.offset.value = (len * 0.45 / headScale) * m.userData.k; });
     }
 
     // s: 見た目の状態（体重・動き・ポーズ）
@@ -338,7 +354,7 @@ export class CatModel {
         this.blinkT -= dt;
         if (this.blinkT < -0.12) this.blinkT = 2 + Math.random() * 4;
         const closed = s.sleep || s.hack ? 1 : this.blinkT < 0 ? 1 : 0;
-        const dilate = s.high ? 1 : Math.max(crouch > 0.3 ? 0.9 : 0, scared ? 1 : 0, 0.2);
+        const dilate = s.high ? 1 : Math.max(crouch > 0.3 ? 0.95 : 0, scared ? 1 : 0, 0.6);
         this.eyes.forEach(({ eye, pupil }, i) => {
             eye.scale.set(1, closed ? 0.08 : 1, 1);
             pupil.scale.set(0.95, 0.9, 0.12 + 0.75 * dilate);
@@ -354,7 +370,7 @@ export class CatModel {
         });
 
         // 足: 2本の骨で、体が低くなってもつま先が床に届くように曲げる
-        const legR = 0.016 + 0.0005 * s.w;
+        const legR = 0.02 + 0.0005 * s.w;
         const reach0 = b.leg + torsoH * 0.34;
         const seg = Math.max(0.01, reach0 / 2);
         const reachY = hipY - torsoH * 0.12;
@@ -366,7 +382,7 @@ export class CatModel {
             l.upper.scale.set(legR, seg, legR);
             l.lower.scale.set(legR * 0.85, seg, legR * 0.85);
             l.knee.position.set(0, -seg, 0);
-            l.paw.scale.set(legR * 1.3, legR * 0.75, legR * 1.1);
+            l.paw.scale.set(legR * 1.35, legR * 0.85, legR * 1.2);
             l.paw.position.set(legR * 0.5, -seg, 0);
             // 対角の足が同時に動く（トロット）
             const diag = (l.front === (l.side > 0)) ? 0 : Math.PI;
@@ -392,7 +408,7 @@ export class CatModel {
         const n = 24;
         const tailLen = L * 0.95;
         const base = new THREE.Vector3(-L * 0.47, torsoH * 0.12, 0);
-        const r0 = Math.max(0.012, hw * 0.22) * (1 + scared * 1.2);
+        const r0 = Math.max(0.02, hw * 0.3) * (1 + scared * 0.8);
         for (let i = 0; i <= n; i++) {
             const k = i / n;
             let p;
@@ -414,11 +430,13 @@ export class CatModel {
                 );
             }
             this.tailPts[i].copy(p);
-            this.tailRadii[i] = r0 * (1 - k * 0.55);
+            this.tailRadii[i] = r0 * (1 - k * 0.3) * (k > 0.8 ? Math.sqrt(Math.max(0.0025, 1 - (k - 0.8) / 0.2)) : 1);
         }
         this.tailTube.update(this.tailPts, this.tailRadii);
 
-        this.setFur((0.005 + 0.00009 * s.w) * (1 + scared * 2.2), Hr);
+        this.setFur((0.011 + 0.00012 * s.w) * (1 + scared * 1.6), Hr);
+        this.ruff.position.set(L * 0.4, -torsoH * 0.12, 0);
+        this.ruff.scale.set(Hr * 0.55, torsoH * 0.3, Math.min(hw * 0.55, Hr * 0.9));
 
         // 接地の影
         this.contact.visible = true;
@@ -428,7 +446,8 @@ export class CatModel {
 
         // 詰まりや破裂寸前は赤っぽく
         const warn = s.stuck || s.w > CFG.BURST_WARN ? (Math.sin(t * 18) > 0 ? 0.25 : 0) : 0;
-        this.bodyMat.emissive.setRGB(warn, 0, 0);
-        this.headMat.emissive.setRGB(warn, 0, 0);
+        this.bodyMat.emissive.setRGB(1, 1 - warn * 3, 1 - warn * 3);
+        this.headMat.emissive.setRGB(1, 1 - warn * 3, 1 - warn * 3);
+        this.bodyMat.emissiveIntensity = this.headMat.emissiveIntensity = 0.16 + warn;
     }
 }

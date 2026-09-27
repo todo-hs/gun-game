@@ -26,13 +26,13 @@ export const STAGES = [
             { type: 'knock', ids: ['mug'], label: 'ダイニングのマグカップを落とす', hint: 'いす → テーブルの順に跳び乗る' },
             { type: 'stay', region: [0, 0.8, 2.35, 0.42, 1.6, 4.65], secs: 2, label: '出窓でひなたぼっこ（2秒）', hint: 'スペース長押しで高く跳べる' }
         ],
-        tips: ['WASD: 移動　マウス: 見回す　スペース: ジャンプ（長押しで高く）', 'クリック: 猫パンチ　F: 毛玉を吐いて痩せる　E: 鳴く']
+        tips: ['WASD: 移動　Shift: ダッシュ　マウス or 矢印キー: 見回す　スペース: ジャンプ（長押しで高く）', 'クリック or J: 猫パンチ　F: 毛玉を吐いて痩せる　E: 鳴く　Esc: メニュー']
     },
     {
         name: 'ソファの下',
         sub: 'おもちゃが転がっていった。',
         start: [2.3, 3.0, -Math.PI / 2],
-        weight: 3,
+        weight: 7,
         foods: [
             ['toy', 2.3, 0, 0.55],
             ['treat', 2.3, 0, 0.96], ['treat', 2.2, 0, 0.78], ['treat', 2.45, 0, 0.6],
@@ -42,7 +42,7 @@ export const STAGES = [
         mice: 2,
         cucumbers: [[2.3, 1.35, 0.2]],
         objectives: [
-            { type: 'collect', food: 'toy', label: 'ソファの下のおもちゃを取る', hint: '体を低くして潜り込む。4kgを超えると詰まる' }
+            { type: 'collect', food: 'toy', label: 'ソファの下のおもちゃを取る', hint: '体を低くして潜り込む。8kgを超えると詰まる' }
         ],
         tips: ['ソファの下のすき間は 20cm。太ると入れない']
     },

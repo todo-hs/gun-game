@@ -215,7 +215,7 @@ export function buildApartment(scene, world) {
 
 // 光: 窓から差し込む日差し + 天井の照明
 export function addLights(scene) {
-    const hemi = new THREE.HemisphereLight(0xfff1e0, 0x4a3524, 0.15);
+    const hemi = new THREE.HemisphereLight(0xfff4e6, 0x6a4a30, 0.45);
     scene.add(hemi);
     const sun = new THREE.DirectionalLight(0xffd8a8, 3.4);
     sun.position.set(-4.5, 5.2, 4.8);

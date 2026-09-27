@@ -20,11 +20,12 @@ export const CFG = {
         const fat = Math.min(1, Math.max(0, (w - 3) / 45));
         return {
             fat,
+            // ミヌエット: 短い足、大きめの丸い頭
             width: 0.17 + 0.018 * w,
-            height: 0.26 + 0.0105 * w,
-            length: 0.4 + 0.008 * w,
-            head: 0.078 + 0.0006 * w,
-            leg: Math.max(0.035, 0.1 - 0.0014 * w)
+            height: 0.21 + 0.0105 * w,
+            length: 0.33 + 0.008 * w,
+            head: 0.1 + 0.0006 * w,
+            leg: Math.max(0.03, 0.058 - 0.0006 * w)
         };
     },
     // ためずに跳べる高さ / 最大までためたときの高さ

@@ -182,83 +182,76 @@ export function buildTextures() {
         }
     });
 
-    // --- 猫 ---
-    // 胴体: u が体の周り（0.5 が背中の真上）、v が体の前後。縞は背中側だけ濃く、お腹は白っぽい
+    // --- 猫（ミヌエット: クリームと白の長毛） ---
+    // 胴体: u が体の周り（0.5 が背中の真上）、v が体の前後。背中はクリーム、お腹は白
     Tex.catBody = tex(1024, 512, (ctx, w, h) => {
-        ctx.fillStyle = '#d98a3d';
-        ctx.fillRect(0, 0, w, h);
-        // お腹（u=0 と 1 の付近）を明るく
         const g = ctx.createLinearGradient(0, 0, w, 0);
-        g.addColorStop(0, '#f6e3c6');
-        g.addColorStop(0.22, 'rgba(246,227,198,0)');
-        g.addColorStop(0.78, 'rgba(246,227,198,0)');
-        g.addColorStop(1, '#f6e3c6');
+        g.addColorStop(0, '#fffaf2');
+        g.addColorStop(0.2, '#f7dcb2');
+        g.addColorStop(0.5, '#eeb877');
+        g.addColorStop(0.8, '#f7dcb2');
+        g.addColorStop(1, '#fffaf2');
         ctx.fillStyle = g;
         ctx.fillRect(0, 0, w, h);
-        // 縞（v 方向に並ぶ帯。背中の中央ほど濃い）
-        for (let i = 0; i < 13; i++) {
-            const y0 = (i + 0.5) / 13 * h;
-            const width = 7 + Math.random() * 8;
+        // ごく淡い縞
+        for (let i = 0; i < 9; i++) {
+            const y0 = (i + 0.5) / 9 * h;
             for (let x = 0; x < w; x += 2) {
-                const u = x / w;
-                const back = Math.max(0, 1 - Math.abs(u - 0.5) / 0.32);
+                const back = Math.max(0, 1 - Math.abs(x / w - 0.5) / 0.25);
                 if (back <= 0) continue;
-                const y = y0 + Math.sin(u * 18 + i) * 5 + (u - 0.5) * 30 * Math.sign(i - 6);
-                ctx.fillStyle = `rgba(140,65,20,${0.75 * back})`;
-                ctx.fillRect(x, y - width / 2, 2, width * (0.5 + back * 0.5));
+                ctx.fillStyle = `rgba(200,140,70,${0.18 * back})`;
+                ctx.fillRect(x, y0 + Math.sin(x * 0.02 + i) * 6 - 8, 2, 16);
             }
         }
-        // 背骨にそった濃い線
-        ctx.fillStyle = 'rgba(140,65,20,0.55)';
-        ctx.fillRect(w * 0.47, 0, w * 0.06, h);
-        strands(ctx, w, h, 30000, ['rgba(255,230,190,0.18)', 'rgba(110,50,15,0.16)'], 5, Math.PI / 2, 0.5);
+        strands(ctx, w, h, 40000, ['rgba(255,250,240,0.22)', 'rgba(170,120,60,0.12)'], 9, Math.PI / 2, 0.5);
     });
 
-    // 頭: u=0.5 が顔の正面。おでこの M 字、白い口元
+    // 頭: u=0.5 が顔の正面。鼻すじから口元が白く、ほっぺはクリーム
     Tex.catHead = tex(1024, 512, (ctx, w, h) => {
-        ctx.fillStyle = '#d98a3d';
+        ctx.fillStyle = '#efbd7f';
         ctx.fillRect(0, 0, w, h);
         const cx = w / 2;
-        const g = ctx.createRadialGradient(cx, h * 0.68, 6, cx, h * 0.68, h * 0.3);
-        g.addColorStop(0, '#fbf1e1');
-        g.addColorStop(0.7, 'rgba(251,241,225,0.8)');
-        g.addColorStop(1, 'rgba(251,241,225,0)');
+        // 顔の白い部分（逆V字のブレーズ）
+        ctx.fillStyle = '#fffaf2';
+        ctx.beginPath();
+        ctx.moveTo(cx - 22, h * 0.18);
+        ctx.lineTo(cx + 22, h * 0.18);
+        ctx.lineTo(cx + 150, h * 0.62);
+        ctx.lineTo(cx + 170, h);
+        ctx.lineTo(cx - 170, h);
+        ctx.lineTo(cx - 150, h * 0.62);
+        ctx.closePath();
+        ctx.fill();
+        const g = ctx.createRadialGradient(cx, h * 0.7, 10, cx, h * 0.7, h * 0.45);
+        g.addColorStop(0, 'rgba(255,255,255,0.9)');
+        g.addColorStop(1, 'rgba(255,255,255,0)');
         ctx.fillStyle = g;
         ctx.fillRect(0, 0, w, h);
-        ctx.fillStyle = '#f6e3c6';
-        ctx.fillRect(0, h * 0.82, w, h * 0.18);
-        ctx.strokeStyle = 'rgba(140,65,20,0.85)';
-        ctx.lineCap = 'round';
-        ctx.lineWidth = 12;
-        [-54, -20, 20, 54].forEach((dx, i) => {
-            ctx.beginPath();
-            ctx.moveTo(cx + dx * 1.5, h * 0.08);
-            ctx.quadraticCurveTo(cx + dx * 1.15, h * 0.22, cx + dx * 0.75, h * (i === 1 || i === 2 ? 0.36 : 0.31));
-            ctx.stroke();
-        });
-        ctx.lineWidth = 9;
-        [-1, 1].forEach(sd => {
-            for (let k = 0; k < 2; k++) {
-                ctx.beginPath();
-                ctx.moveTo(cx + sd * 140, h * (0.5 + k * 0.08));
-                ctx.lineTo(cx + sd * 210, h * (0.44 + k * 0.1));
-                ctx.stroke();
-            }
-        });
-        strands(ctx, w, h, 25000, ['rgba(255,230,190,0.16)', 'rgba(110,50,15,0.13)'], 4, Math.PI / 2, 0.6);
+        ctx.fillStyle = '#fbf6ee';
+        ctx.fillRect(0, h * 0.8, w, h * 0.2);
+        strands(ctx, w, h, 30000, ['rgba(255,250,240,0.2)', 'rgba(170,120,60,0.1)'], 6, Math.PI / 2, 0.7);
     });
 
-    // しっぽ: 輪の縞
+    // しっぽ: ふさふさのクリーム、先は明るい
     Tex.catTail = tex(256, 512, (ctx, w, h) => {
-        ctx.fillStyle = '#d98a3d';
+        const g = ctx.createLinearGradient(0, 0, 0, h);
+        g.addColorStop(0, '#eeb877');
+        g.addColorStop(0.8, '#f5d3a3');
+        g.addColorStop(1, '#fffaf2');
+        ctx.fillStyle = g;
         ctx.fillRect(0, 0, w, h);
-        for (let i = 0; i < 8; i++) {
-            ctx.fillStyle = 'rgba(140,65,20,0.8)';
-            ctx.fillRect(0, (i + 0.3) / 8 * h, w, h / 20);
+        for (let i = 0; i < 6; i++) {
+            ctx.fillStyle = 'rgba(200,140,70,0.16)';
+            ctx.fillRect(0, (i + 0.3) / 7 * h, w, h / 18);
         }
-        ctx.fillStyle = 'rgba(120,55,15,0.9)';
-        ctx.fillRect(0, h * 0.93, w, h * 0.07);
-        strands(ctx, w, h, 8000, ['rgba(255,230,190,0.16)', 'rgba(110,50,15,0.14)'], 4);
+        strands(ctx, w, h, 9000, ['rgba(255,250,240,0.2)', 'rgba(170,120,60,0.12)'], 8);
+    });
+
+    // 胸の飾り毛や足の白
+    Tex.catWhite = tex(256, 256, (ctx, w, h) => {
+        ctx.fillStyle = '#fffaf2';
+        ctx.fillRect(0, 0, w, h);
+        strands(ctx, w, h, 6000, ['rgba(255,255,255,0.4)', 'rgba(220,200,170,0.1)'], 7);
     });
 
     // 毛の1本1本（シェル毛皮の透明度に使う）。値が大きい点ほど長い毛
@@ -272,26 +265,26 @@ export function buildTextures() {
         }
     }, { color: false, repeat: [22, 22] });
 
-    // 目: 緑から金色の虹彩（瞳孔は別の黒いメッシュ）
+    // 目: 大きな琥珀色の虹彩（瞳孔は別の黒いメッシュ）
     Tex.iris = tex(256, 256, (ctx, w, h) => {
-        ctx.fillStyle = '#f4efe2';
+        ctx.fillStyle = '#f7f1e6';
         ctx.fillRect(0, 0, w, h);
         const cx = w / 2, cy = h / 2;
-        const g = ctx.createRadialGradient(cx, cy, 2, cx, cy, 70);
-        g.addColorStop(0, '#caa53c');
-        g.addColorStop(0.55, '#9cc24a');
-        g.addColorStop(0.95, '#4f7a2a');
-        g.addColorStop(1, '#2a3a18');
+        const g = ctx.createRadialGradient(cx, cy, 2, cx, cy, 78);
+        g.addColorStop(0, '#f7c85a');
+        g.addColorStop(0.6, '#e59a2c');
+        g.addColorStop(0.92, '#a8601a');
+        g.addColorStop(1, '#4a2a0a');
         ctx.fillStyle = g;
         ctx.beginPath();
-        ctx.arc(cx, cy, 72, 0, Math.PI * 2);
+        ctx.arc(cx, cy, 80, 0, Math.PI * 2);
         ctx.fill();
-        ctx.strokeStyle = 'rgba(60,80,20,0.35)';
+        ctx.strokeStyle = 'rgba(120,60,10,0.3)';
         for (let i = 0; i < 90; i++) {
             const a = (i / 90) * Math.PI * 2;
             ctx.beginPath();
-            ctx.moveTo(cx + Math.cos(a) * 14, cy + Math.sin(a) * 14);
-            ctx.lineTo(cx + Math.cos(a) * 70, cy + Math.sin(a) * 70);
+            ctx.moveTo(cx + Math.cos(a) * 16, cy + Math.sin(a) * 16);
+            ctx.lineTo(cx + Math.cos(a) * 76, cy + Math.sin(a) * 76);
             ctx.stroke();
         }
     });

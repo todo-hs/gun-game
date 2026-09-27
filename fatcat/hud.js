@@ -68,6 +68,9 @@ export class Hud {
         $('sofa').textContent = `ソファの下 ${underSofa ? '○ 入れる' : '× 入れない'}`;
         $('sofa').className = underSofa ? 'ok' : 'ng';
         $('damage').textContent = `被害総額 ¥${game.damage.toLocaleString()}`;
+        const st = $('stamina');
+        st.style.width = `${Math.round(c.stamina * 100)}%`;
+        st.className = c.tired ? 'tired' : c.dashing ? 'dash' : '';
         $('timer').textContent = game.stage.timeLimit ? `残り ${Math.max(0, game.stage.timeLimit - game.time).toFixed(0)} 秒` : `${game.time.toFixed(1)} 秒`;
         $('timer').classList.toggle('danger', !!game.stage.timeLimit && game.stage.timeLimit - game.time < 15);
 

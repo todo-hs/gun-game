@@ -19,7 +19,7 @@ renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 0.8;
+renderer.toneMappingExposure = 0.9;
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 document.getElementById('view').appendChild(renderer.domElement);
 
@@ -116,7 +116,13 @@ document.addEventListener('pointerlockchange', () => {
     const locked = document.pointerLockElement === renderer.domElement;
     hud.show('pause', mode === 'play' && game.state === 'play' && !locked);
 });
-document.getElementById('pause').addEventListener('click', () => lock());
+document.getElementById('pause').addEventListener('click', e => {
+    if (e.target.id !== 'pause' && e.target.id !== 'pause-resume') return;
+    hud.show('pause', false);
+    lock();
+});
+document.getElementById('pause-retry').addEventListener('click', () => startStage(game.index));
+document.getElementById('pause-title').addEventListener('click', () => showTitle(false));
 
 document.addEventListener('mousemove', e => {
     if (mode !== 'play' || document.pointerLockElement !== renderer.domElement) return;
@@ -127,10 +133,7 @@ document.addEventListener('mousemove', e => {
 renderer.domElement.addEventListener('mousedown', e => {
     SFX.init();
     if (mode !== 'play') return;
-    if (document.pointerLockElement !== renderer.domElement) {
-        lock();
-        return;
-    }
+    if (document.pointerLockElement !== renderer.domElement) lock();
     if (e.button === 0) game.punch();
     if (e.button === 2) game.spit();
 });
@@ -146,7 +149,7 @@ window.addEventListener('keydown', e => {
         return;
     }
     if (game.state !== 'play') {
-        if (e.code === 'KeyR' || (game.state === 'fail' && (e.code === 'Space' || e.code === 'Enter'))) startStage(game.index);
+        if (game.state === 'fail' && (e.code === 'Space' || e.code === 'Enter')) startStage(game.index);
         else if (game.state === 'clear' && (e.code === 'Space' || e.code === 'Enter')) game.onNext();
         return;
     }
@@ -155,9 +158,9 @@ window.addEventListener('keydown', e => {
         case 'KeyF': game.spit(); break;
         case 'KeyE': game.meow(); break;
         case 'KeyJ': game.punch(); break;
-        case 'KeyR': startStage(game.index); break;
+        case 'KeyK': game.spit(); break;
         case 'KeyM': SFX.muted = !SFX.muted; break;
-        case 'Escape': break;
+        case 'Escape': hud.show('pause', true); break;
     }
 });
 window.addEventListener('keyup', e => {
@@ -174,10 +177,27 @@ window.addEventListener('resize', () => {
 
 // ---------------------------------------------------------------- ループ
 
+// 重いPCでは自動で描画解像度を下げる（1.5秒ごとに平均フレーム時間を見る）
 let last = performance.now();
+let perfT = 0, perfN = 0;
+let pixelRatio = renderer.getPixelRatio();
+function adaptQuality(rawDt) {
+    perfT += rawDt;
+    perfN++;
+    if (perfT < 1.5) return;
+    const avg = perfT / perfN;
+    perfT = perfN = 0;
+    if (avg > 1 / 40 && pixelRatio > 0.6) {
+        pixelRatio = Math.max(0.6, pixelRatio * 0.8);
+        renderer.setPixelRatio(pixelRatio);
+    }
+}
+
 function frame(now) {
-    const dt = Math.min(0.05, (now - last) / 1000);
+    const rawDt = (now - last) / 1000;
+    const dt = Math.min(0.05, rawDt);
     last = now;
+    adaptQuality(Math.min(0.5, rawDt));
     if (mode === 'title') titleUpdate(dt);
     else game.update(dt);
     envT -= dt;

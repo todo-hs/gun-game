@@ -62,7 +62,8 @@ export class Game {
             punchT: 0, punchCd: 0, eatT: 0, eatFood: null, hackT: 0,
             idle: 0, loaf: false, sleeping: false, zzz: 0,
             high: 0, scaredT: 0, stuck: false, stuckT: 0, meowT: 0,
-            airT: 0, fallV: 0, lookYaw: 0
+            airT: 0, fallV: 0, lookYaw: 0,
+            stamina: 1, dashing: false, tired: false
         };
         this.yaw = heading;
         this.pitch = 0.42;
@@ -216,8 +217,8 @@ export class Game {
     input() {
         const k = this.keys;
         let fx = 0, fz = 0;
-        if (k.KeyW || k.ArrowUp) fz += 1;
-        if (k.KeyS || k.ArrowDown) fz -= 1;
+        if (k.KeyW) fz += 1;
+        if (k.KeyS) fz -= 1;
         if (k.KeyA) fx -= 1;
         if (k.KeyD) fx += 1;
         // カメラの向きを基準にした移動方向
@@ -236,8 +237,11 @@ export class Game {
         c.high = Math.max(0, c.high - dt);
         c.scaredT = Math.max(0, c.scaredT - dt);
         c.meowT = Math.max(0, c.meowT - dt);
-        if (this.keys.ArrowLeft) this.yaw -= dt * 2;
-        if (this.keys.ArrowRight) this.yaw += dt * 2;
+        // マウスがなくても矢印キーでカメラを動かせる
+        if (this.keys.ArrowLeft) this.yaw -= dt * 2.2;
+        if (this.keys.ArrowRight) this.yaw += dt * 2.2;
+        if (this.keys.ArrowUp) this.pitch = Math.max(-0.15, this.pitch - dt * 1.2);
+        if (this.keys.ArrowDown) this.pitch = Math.min(1.25, this.pitch + dt * 1.2);
 
         if (c.w >= CFG.BURST_WARN) {
             c.warnT = (c.warnT || 0) - dt;
@@ -265,7 +269,21 @@ export class Game {
         // またたびで酔うと、まっすぐ歩けない
         if (c.high > 0 && dir.lengthSq() > 0) dir.applyAxisAngle(UP, Math.sin(this.time * 2.3) * 0.9);
         const busy = c.eatT > 0 || c.hackT > 0;
-        let spd = CFG.speed(c.w) * (this.keys.ShiftLeft || this.keys.ShiftRight ? 1.6 : 1) * (c.high > 0 ? 1.4 : 1);
+        // ダッシュ: Shift。スタミナを使う（太っているほど早くバテる）
+        const wantDash = (this.keys.ShiftLeft || this.keys.ShiftRight) && dir.lengthSq() > 0 && c.onGround && !c.charging;
+        c.dashing = wantDash && !c.tired && c.stamina > 0;
+        if (c.dashing) {
+            c.stamina = Math.max(0, c.stamina - dt * (0.22 + c.w * 0.012));
+            if (c.stamina <= 0) {
+                c.tired = true;
+                this.hud.floatText(this.headPos(), 'ゼェ… ゼェ…', '#ffffff', 20, 1.4);
+                if (c.w >= 20) this.sayOnce('tired', ['デブは走れない', 'スタミナも体重に比例して減る']);
+            }
+        } else {
+            c.stamina = Math.min(1, c.stamina + dt * (c.tired ? 0.18 : 0.3));
+            if (c.tired && c.stamina > 0.35) c.tired = false;
+        }
+        let spd = CFG.speed(c.w) * (c.dashing ? 2.0 : c.tired ? 0.7 : 1) * (c.high > 0 ? 1.4 : 1);
         if (c.charging) spd *= 0.25;
         if (c.squeeze) spd *= 0.5;
         if (busy) spd = 0;
@@ -915,6 +933,11 @@ export class Game {
         cam.up.set(0, 1, 0);
         if (c.high > 0) cam.up.set(Math.sin(this.time * 1.7) * 0.12, 1, 0).normalize();
         cam.lookAt(this.camTarget);
+        const fov = c.dashing ? 64 : 55;
+        if (Math.abs(cam.fov - fov) > 0.1) {
+            cam.fov += (fov - cam.fov) * Math.min(1, dt * 6);
+            cam.updateProjectionMatrix();
+        }
     }
 
     // 家具や壁の箱にレイが当たる距離

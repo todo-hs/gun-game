@@ -108,7 +108,12 @@ export const SFX = {
                 case 'pop': this.tone(200, 1200, 0.12, 'sine', 0.12); break;
                 case 'boom': this.noise(0.6, 0.2, 600, 'lowpass'); this.tone(120, 30, 0.5, 'sawtooth', 0.12); break;
                 case 'warn': this.tone(90, 70, 0.12, 'sine', 0.15); break;
-                case 'roomba': this.tone(180, 160, 0.3, 'triangle', 0.02); break;
+                case 'meowNpc': this.meow(1.3 + Math.random() * 0.3, 0.35); break;
+                case 'crow': this.tone(700, 450, 0.18, 'sawtooth', 0.05); this.tone(650, 420, 0.2, 'sawtooth', 0.05, 0.25); break;
+                case 'bark': this.tone(420, 180, 0.12, 'square', 0.08); this.noise(0.08, 0.06, 1200, 'bandpass'); break;
+                case 'whine': this.tone(900, 1400, 0.4, 'sine', 0.06); break;
+                case 'horn': this.tone(392, 392, 0.25, 'square', 0.07); this.tone(330, 330, 0.25, 'square', 0.07); this.tone(392, 392, 0.4, 'square', 0.07, 0.35); break;
+                case 'angry': this.tone(180, 120, 0.3, 'sawtooth', 0.08); break;
                 case 'fail': this.tone(420, 60, 0.8, 'sawtooth', 0.09); break;
                 case 'clear':
                     [523, 659, 784, 1046].forEach((f, i) => this.tone(f, f, 0.14, 'square', 0.06, i * 0.1));

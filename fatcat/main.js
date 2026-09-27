@@ -1,103 +1,105 @@
 // 起動・タイトル画面・入力・メインループ
 import * as THREE from 'three';
-import * as CANNON from 'cannon-es';
-import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { CFG } from './config.js';
 import { SFX } from './audio.js';
-import { buildTextures } from './textures.js';
-import { buildApartment, addLights } from './world.js';
-import { CatModel } from './cat.js';
+import { buildTown } from './town.js';
+import { skyDome } from './toon.js';
+import { CatModel } from './catmodel.js';
 import { Hud } from './hud.js';
 import { Game } from './game.js';
-import { STAGES } from './stages.js';
-
-buildTextures();
 
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 0.9;
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 document.getElementById('view').appendChild(renderer.domElement);
 
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x1d1712);
-const pmrem = new THREE.PMREMGenerator(renderer);
-scene.environment = pmrem.fromScene(new RoomEnvironment(renderer), 0.04).texture;
-const camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 0.03, 60);
+const SKY = 0xcfe9fb;
+scene.fog = new THREE.Fog(SKY, 35, 120);
+const camera = new THREE.PerspectiveCamera(58, window.innerWidth / window.innerHeight, 0.03, 500);
 
-const world = new CANNON.World({ gravity: new CANNON.Vec3(0, -9.82, 0) });
-world.allowSleep = true;
-world.defaultContactMaterial.friction = 0.4;
-world.defaultContactMaterial.restitution = 0.15;
-
-const apt = buildApartment(scene, world);
-// 部屋の反射光（環境マップ）は控えめに。後から出てくる物にも効くよう定期的にかけ直す
-const ENV = 0.35;
-function tuneEnv() {
-    scene.traverse(o => {
-        if (!o.material) return;
-        (Array.isArray(o.material) ? o.material : [o.material]).forEach(m => { if ('envMapIntensity' in m) m.envMapIntensity = ENV; });
-    });
+// 空と雲
+const sky = skyDome();
+scene.add(sky);
+const cloudMat = new THREE.MeshBasicMaterial({ color: 0xffffff, fog: false });
+for (let i = 0; i < 12; i++) {
+    const cl = new THREE.Group();
+    const a = (i / 12) * Math.PI * 2 + Math.random() * 0.3;
+    for (let k = 0; k < 4; k++) {
+        const s = new THREE.Mesh(new THREE.SphereGeometry(6 + Math.random() * 5, 12, 8), cloudMat);
+        s.position.set(k * 8 - 12, Math.random() * 3, Math.random() * 4);
+        s.scale.y = 0.55;
+        cl.add(s);
+    }
+    cl.position.set(32 + Math.cos(a) * 170, 45 + Math.random() * 30, 24 + Math.sin(a) * 170);
+    cl.lookAt(32, cl.position.y, 24);
+    scene.add(cl);
 }
-tuneEnv();
-let envT = 0;
-addLights(scene);
-const model = new CatModel();
+
+// 光: 空からの環境光 + 太陽（影は猫の周りだけ細かく）
+scene.add(new THREE.HemisphereLight(0xffffff, 0x9bb58a, 1.15));
+const sun = new THREE.DirectionalLight(0xfff3dc, 2.1);
+sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048);
+sun.shadow.camera.left = sun.shadow.camera.bottom = -14;
+sun.shadow.camera.right = sun.shadow.camera.top = 14;
+sun.shadow.camera.near = 1;
+sun.shadow.camera.far = 80;
+sun.shadow.bias = -0.0004;
+sun.shadow.normalBias = 0.03;
+scene.add(sun, sun.target);
+const SUN_DIR = new THREE.Vector3(-0.45, 1, 0.55).normalize();
+function followSun(p) {
+    sun.target.position.copy(p);
+    sun.position.copy(p).addScaledVector(SUN_DIR, 40);
+}
+
+const town = buildTown(scene);
+const model = new CatModel('player');
 scene.add(model.root);
-const hud = new Hud(camera);
-const game = new Game({ scene, camera, world, colliders: apt.colliders, holes: apt.holes, catModel: model, hud });
+const hud = new Hud(camera, town);
+const game = new Game({ scene, camera, town, catModel: model, hud });
 window.fatcat = game;
 
 let mode = 'title';
 let titleT = 0;
 
-function startStage(i) {
+function begin(fresh) {
     SFX.init();
     mode = 'play';
-    game.load(i);
+    game.start(fresh);
     lock();
 }
-game.onRetry = () => startStage(game.index);
-game.onNext = () => {
-    if (game.index + 1 >= STAGES.length) showTitle(true);
-    else startStage(game.index + 1);
-};
 
-function showTitle(ending) {
+function showTitle() {
     mode = 'title';
-    game.unload();
     game.state = 'idle';
+    hud.clearFloating();
     if (document.pointerLockElement) document.exitPointerLock();
-    // タイトル: ラグの上でくつろぐ猫
-    ['vase', 'mug', 'remote'].forEach((t, k) => game.props.add(t, 2.1 + k * 0.3, 0.4, 2.1));
-    game.props.add('tv', 2.3, 0.45, 6.78, Math.PI);
-    game.props.add('cushion', 1.9, 0.46, 0.75);
-    game.props.add('plant', 0.45, 0, 0.45);
-    hud.showTitle(startStage, ending);
+    hud.showTitle(() => begin(false), () => begin(true));
 }
 
+// タイトル: 空き地の段ボールの前でくつろぐ猫
 function titleUpdate(dt) {
     titleT += dt;
-    const w = 4 + (Math.sin(titleT * 0.45) * 0.5 + 0.5) * 34;
+    const w = 5 + (Math.sin(titleT * 0.45) * 0.5 + 0.5) * 30;
+    const h = game.sp.home;
+    const cx = h.x, cz = h.z;
     model.root.visible = true;
-    model.update({ w, t: titleT, speed: 0, onGround: true, loaf: true, lookYaw: Math.sin(titleT * 0.6) * 0.5 }, dt);
-    // ラグの上の猫を、南東側からゆっくり回り込んで映す
-    const cx = 2.3, cz = 3.0;
     model.root.position.set(cx, 0, cz);
-    model.root.rotation.set(0, -0.9, 0);
+    model.root.rotation.set(0, 0.6, 0);
     model.root.scale.set(1, 1, 1);
+    model.update({ w, t: titleT, speed: 0, onGround: true, loaf: true, happy: true, lookYaw: Math.sin(titleT * 0.6) * 0.5 }, dt);
     const b = CFG.body(w);
-    const r = 0.7 + b.length * 1.9;
-    const a = 0.9 + Math.sin(titleT * 0.15) * 0.45;
-    camera.position.set(cx + Math.cos(a) * r, 0.25 + b.height * 1.4, cz + Math.sin(a) * r);
+    const r = 1.1 + b.length * 2.2;
+    const a = -0.6 + Math.sin(titleT * 0.15) * 0.5;
+    camera.position.set(cx + Math.cos(a) * r, 0.35 + b.height * 1.3, cz + Math.sin(a) * r);
     camera.up.set(0, 1, 0);
-    camera.lookAt(cx, b.height * 0.75, cz);
-    world.step(1 / 60, dt, 3);
-    game.props.update(dt);
+    camera.lookAt(cx, b.height * 0.9 + 0.25, cz);
+    followSun(model.root.position);
 }
 
 // ---------------------------------------------------------------- 入力
@@ -112,17 +114,28 @@ function lock() {
     }
 }
 
+function resume() {
+    hud.show('pause', false);
+    lock();
+}
+
 document.addEventListener('pointerlockchange', () => {
     const locked = document.pointerLockElement === renderer.domElement;
-    hud.show('pause', mode === 'play' && game.state === 'play' && !locked);
+    if (mode === 'play' && game.state === 'play' && !locked) hud.show('pause', true);
 });
 document.getElementById('pause').addEventListener('click', e => {
     if (e.target.id !== 'pause' && e.target.id !== 'pause-resume') return;
+    resume();
+});
+document.getElementById('pause-retry').addEventListener('click', () => {
     hud.show('pause', false);
+    if (game.state === 'play') game.respawn();
     lock();
 });
-document.getElementById('pause-retry').addEventListener('click', () => startStage(game.index));
-document.getElementById('pause-title').addEventListener('click', () => showTitle(false));
+document.getElementById('pause-title').addEventListener('click', () => showTitle());
+document.getElementById('to-title').addEventListener('click', () => showTitle());
+
+const paused = () => !document.getElementById('pause').classList.contains('hidden');
 
 document.addEventListener('mousemove', e => {
     if (mode !== 'play' || document.pointerLockElement !== renderer.domElement) return;
@@ -148,9 +161,17 @@ window.addEventListener('keydown', e => {
         if (e.code === 'Enter' || e.code === 'Space') document.getElementById('title-start').click();
         return;
     }
-    if (game.state !== 'play') {
-        if (game.state === 'fail' && (e.code === 'Space' || e.code === 'Enter')) startStage(game.index);
-        else if (game.state === 'clear' && (e.code === 'Space' || e.code === 'Enter')) game.onNext();
+    if (e.code === 'KeyM') SFX.muted = !SFX.muted;
+    if (game.state === 'fail') {
+        if (e.code === 'Space' || e.code === 'Enter') game.respawn();
+        return;
+    }
+    if (game.state === 'clear') {
+        if (e.code === 'Space' || e.code === 'Enter') document.getElementById('result-next').click();
+        return;
+    }
+    if (paused()) {
+        if (e.code === 'Escape' || e.code === 'Enter') resume();
         return;
     }
     switch (e.code) {
@@ -159,15 +180,17 @@ window.addEventListener('keydown', e => {
         case 'KeyE': game.meow(); break;
         case 'KeyJ': game.punch(); break;
         case 'KeyK': game.spit(); break;
-        case 'KeyM': SFX.muted = !SFX.muted; break;
-        case 'Escape': hud.show('pause', true); break;
+        case 'Escape':
+            hud.show('pause', true);
+            if (document.pointerLockElement) document.exitPointerLock();
+            break;
     }
 });
 window.addEventListener('keyup', e => {
     game.keys[e.code] = false;
     if (e.code === 'Space' && mode === 'play') game.releaseJump();
 });
-document.getElementById('to-title').addEventListener('click', () => showTitle(false));
+window.addEventListener('blur', () => { game.keys = {}; });
 
 window.addEventListener('resize', () => {
     renderer.setSize(window.innerWidth, window.innerHeight);
@@ -199,16 +222,15 @@ function frame(now) {
     last = now;
     adaptQuality(Math.min(0.5, rawDt));
     if (mode === 'title') titleUpdate(dt);
-    else game.update(dt);
-    envT -= dt;
-    if (envT <= 0) {
-        envT = 0.5;
-        tuneEnv();
+    else if (!paused()) {
+        game.update(dt);
+        followSun(game.cat.pos);
     }
+    sky.position.copy(camera.position);
     renderer.render(scene, camera);
     requestAnimationFrame(frame);
 }
 
-showTitle(false);
+showTitle();
 document.getElementById('loading').classList.add('hidden');
 requestAnimationFrame(frame);

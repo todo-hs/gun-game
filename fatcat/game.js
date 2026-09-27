@@ -1,151 +1,172 @@
-// ゲームの中身: 猫の操作・当たり判定・食事・パンチ・詰まり・敵・ステージの目標・カメラ
+// ゲームの中身: 猫の操作・当たり判定・食事・パンチ・詰まり・町の住人・ボス・カメラ
 import * as THREE from 'three';
-import * as CANNON from 'cannon-es';
-import { CFG, NARRATOR, DEATHS, Save } from './config.js';
+import { CFG, NARRATOR, DEATHS, BOSSES, FOODS, Save } from './config.js';
 import { SFX } from './audio.js';
-import { ROOM } from './world.js';
-import { PropSystem } from './props.js';
-import { Mouse, Roomba, Food, Cucumber } from './entities.js';
-import { STAGES } from './stages.js';
+import { TOWN, Grid } from './town.js';
+import { Food, TrashCan, Badge, part } from './items.js';
+import { Mouse, Crow, Dog, Human, Truck } from './critters.js';
+import { NpcCat, BossCat } from './felines.js';
+import { toon, refreshOutlines } from './toon.js';
 
 const UP = new THREE.Vector3(0, 1, 0);
+const BOSS_IDS = ['mike', 'buchi', 'kuro'];
 
 export class Game {
-    constructor({ scene, camera, world, colliders, holes, catModel, hud }) {
+    constructor({ scene, camera, town, catModel, hud }) {
         this.scene = scene;
         this.camera = camera;
-        this.world = world;
-        this.staticColliders = colliders;
-        this.holes = holes;
+        this.town = town;
+        this.sp = town.spawns;
         this.model = catModel;
         this.hud = hud;
-        this.props = new PropSystem(scene, world, (p, pos) => this.onBreak(p, pos));
         this.keys = {};
         this.yaw = -Math.PI / 2;
-        this.pitch = 0.45;
-        this.camPos = new THREE.Vector3(4, 1.5, 5);
+        this.pitch = 0.4;
+        this.camPos = new THREE.Vector3(3, 1.5, 44);
         this.camTarget = new THREE.Vector3();
         this.shake = 0;
         this.state = 'idle';
+        this.time = 0;
         this.fx = [];
+        this.near_ = [];
+        this.saidOnce = {};
+        this.narration = null;
 
-        // 猫の物理ボディ（キネマティック: 小物を押しのける）
-        this.catBody = new CANNON.Body({ mass: 0, type: CANNON.Body.KINEMATIC });
-        this.world.addBody(this.catBody);
+        // 動かない住人・乗り物（ずっと町にいる）
+        this.trash = this.sp.trash.map(({ x, z }) => {
+            const col = { min: new THREE.Vector3(x - 0.27, 0, z - 0.27), max: new THREE.Vector3(x + 0.27, 0.72, z + 0.27), name: 'trash', off: false };
+            town.colliders.push(col);
+            return new TrashCan(scene, x, z, col);
+        });
+        // ゴミ箱を足したので当たり判定の升目を作り直す
+        this.town.grid = new Grid(town.colliders);
+        this.humans = this.sp.humans.map(h => new Human(scene, h));
+        this.dog = new Dog(scene, this.sp.dog);
+        this.crows = this.sp.crows.map(c => new Crow(scene, this.sp.poles[c.perch]));
+        this.truck = new Truck(scene, this.sp.truckZ);
+        this.npcs = this.sp.npcs.map(n => new NpcCat(scene, n));
+        this.buildDoor();
+        this.foods = [];
+        this.spawnRecs = this.sp.foods.map(f => ({ ...f, food: null, timer: 0 }));
+        this.mice = [];
+        this.mouseT = 0;
+        this.badges = [];
+        this.bosses = {};
+        this.cat = this.newCat(CFG.START_WEIGHT);
         this.catShapeW = -1;
+        this.resetWorld();
     }
 
-    // ---------------------------------------------------------------- ステージ
+    // ---------------------------------------------------------------- 町の準備
 
-    load(index) {
-        this.unload();
-        this.index = index;
-        const st = STAGES[index];
-        this.stage = st;
-        this.time = 0;
-        this.damage = 0;
-        this.eaten = {};
-        this.bossEaten = false;
-        this.narration = null;
-        this.saidOnce = {};
-        this.milestones = {};
-        this.rainT = 1;
-        this.mouseT = 3;
-        this.state = 'play';
-        this.result = null;
+    buildDoor() {
+        const d = this.sp.door;
+        this.door = { ...d, open: 0, openT: 0, msgT: 0 };
+        const g = new THREE.Group();
+        g.position.copy(d.hinge);
+        const slab = part(new THREE.BoxGeometry(d.width, d.height, 0.08), toon(0x6d7a86), 0.01);
+        slab.position.set(d.width / 2, d.height / 2, 0);
+        const knob = part(new THREE.SphereGeometry(0.04, 8, 6), toon(0xd9b44a), 0);
+        knob.position.set(d.width - 0.15, 1.0, -0.06);
+        g.add(slab, knob);
+        this.scene.add(g);
+        refreshOutlines(g);
+        this.door.mesh = g;
+    }
 
-        const [sx, sz, heading] = st.start;
-        this.cat = {
-            pos: new THREE.Vector3(sx, 0, sz), vel: new THREE.Vector3(),
-            heading, w: st.weight, vw: st.weight,
+    // 食べ物・バッジ・ボスを置き直す（はじめから / つづきから）
+    resetWorld() {
+        this.foods.forEach(f => f.remove());
+        this.foods = [];
+        this.spawnRecs.forEach(r => {
+            r.food = new Food(this.scene, r.type, r.x, r.y, r.z, r);
+            r.timer = 0;
+            this.foods.push(r.food);
+        });
+        this.badges.forEach(b => b.alive && b.remove());
+        this.badges = this.sp.badges.map(([x, y, z], i) => new Badge(this.scene, i, x, y, z)).filter(b => {
+            if (Save.data.badges.includes(b.id)) {
+                b.remove();
+                return false;
+            }
+            return true;
+        });
+        Object.values(this.bosses).forEach(b => this.scene.remove(b.model.root));
+        this.bosses = {};
+        BOSS_IDS.forEach(id => { this.bosses[id] = new BossCat(this.scene, id, this.sp.bosses[id], !!Save.data.bosses[id]); });
+        this.mice.forEach(m => m.remove());
+        this.mice = [];
+        for (let i = 0; i < this.sp.mice.count; i++) this.mice.push(new Mouse(this.scene, this.sp.mice));
+        this.activeBoss = null;
+    }
+
+    newCat(w) {
+        const h = this.sp.home;
+        return {
+            pos: h.clone(), vel: new THREE.Vector3(),
+            heading: this.sp.homeHeading, w, vw: w, r: 0.1,
             onGround: true, squeeze: false, charge: 0, charging: false,
             punchT: 0, punchCd: 0, eatT: 0, eatFood: null, hackT: 0,
             idle: 0, loaf: false, sleeping: false, zzz: 0,
             high: 0, scaredT: 0, stuck: false, stuckT: 0, meowT: 0,
-            airT: 0, fallV: 0, lookYaw: 0,
+            airT: 0, lookYaw: 0, seatT: 0,
             stamina: 1, dashing: false, tired: false
         };
-        this.yaw = heading;
-        this.pitch = 0.42;
-
-        (st.props || []).forEach(([type, x, y, z, rot, id]) => {
-            const p = this.props.add(type, x, y, z, rot || 0);
-            p.id = id;
-        });
-        this.props.updatePushable(this.cat.w);
-        this.foods = (st.foods || []).map(([type, x, y, z]) => new Food(this.scene, type, x, y, z, Math.random() * 6));
-        this.mice = [];
-        for (let i = 0; i < (st.mice || 0); i++) this.spawnMouse(true);
-        this.roombas = (st.roombas || []).map(([x, z]) => new Roomba(this.scene, x, z));
-        this.boss = st.boss ? new Roomba(this.scene, st.boss[0], st.boss[1], st.boss[2], true) : null;
-        this.cucumbers = (st.cucumbers || []).map(([x, z, r]) => new Cucumber(this.scene, x, z, r || 0));
-        this.objectives = st.objectives.map(o => ({ ...o, done: false, timer: 0 }));
-
-        this.updateCatShape();
-        this.model.root.visible = true;
-        this.model.update(this.visualState(0), 0);
-        this.placeCameraNow();
-        this.hud.startStage(st, index);
-        this.say(NARRATOR.pick(['さあ、猫の時間だ', '今日も好き勝手に生きよう', '健康診断は来週です']));
     }
 
-    unload() {
-        this.props.clear();
-        (this.foods || []).forEach(f => f.remove());
-        (this.mice || []).forEach(m => m.remove());
-        (this.roombas || []).forEach(r => r.remove());
-        if (this.boss) this.boss.remove();
-        (this.cucumbers || []).forEach(c => c.remove());
-        this.fx.forEach(f => this.scene.remove(f.obj));
-        this.foods = [];
-        this.mice = [];
-        this.roombas = [];
-        this.boss = null;
-        this.cucumbers = [];
-        this.fx = [];
-    }
-
-    spawnMouse(anywhere) {
-        let x, z;
-        if (anywhere) {
-            for (let k = 0; k < 20; k++) {
-                x = 0.5 + Math.random() * 9;
-                z = 0.5 + Math.random() * 6;
-                if (!this.footprintBlocked(x, z, 0.05)) break;
-            }
-        } else {
-            const h = this.holes[Math.floor(Math.random() * this.holes.length)];
-            x = h.x + h.dir * 0.08;
-            z = h.z;
+    // はじめる / つづきから
+    start(fresh) {
+        if (fresh) {
+            Save.reset();
+            this.resetWorld();
         }
-        this.mice.push(new Mouse(this.scene, x, z));
+        const w = !fresh && Save.data.weight >= CFG.MIN_WEIGHT && Save.data.weight < CFG.BURST_WARN ? Save.data.weight : CFG.START_WEIGHT;
+        Save.data.started = true;
+        Save.save();
+        this.spawnCat(w);
+        this.hud.startGame();
+        this.say(fresh ? 'この町の町内会長になるのは、どの猫だ' : NARRATOR.pick(['おかえり', '散歩の続きだ']));
     }
 
-    footprintBlocked(x, z, r) {
-        return this.staticColliders.some(c => c.min.y < 0.3 && x > c.min.x - r && x < c.max.x + r && z > c.min.z - r && z < c.max.z + r);
+    spawnCat(w) {
+        this.cat = this.newCat(w);
+        this.catShapeW = -1;
+        this.updateCatShape();
+        this.milestones = {};
+        NARRATOR.milestones.forEach(([kg]) => { if (w >= kg) this.milestones[kg] = true; });
+        this.yaw = this.sp.homeHeading;
+        this.pitch = 0.35;
+        this.state = 'play';
+        this.activeBoss = null;
+        this.saveT = 5;
+        this.model.root.visible = true;
+        this.model.update(this.visualState(), 0);
+        this.placeCameraNow();
+    }
+
+    // 失敗したら家（段ボール）から。ボスとバッジはそのまま
+    respawn() {
+        this.hud.hideResult();
+        this.spawnCat(CFG.START_WEIGHT);
+        Save.data.weight = CFG.START_WEIGHT;
+        Save.save();
+        this.say(NARRATOR.pick(NARRATOR.respawn));
     }
 
     // ---------------------------------------------------------------- 当たり判定
-
-    get colliders() {
-        return this.staticColliders;
-    }
 
     dims() {
         const b = CFG.body(this.cat.w);
         return { b, r: Math.max(0.07, b.width / 2), H: b.height, hc: b.height * CFG.CROUCH_RATIO };
     }
 
-    // 猫の箱 (足元 pos、半径 r、高さ h) が壁や家具に重なるか
+    // 猫の箱 (足元 pos、半径 r、高さ h) が壁や建物に重なるか
     overlaps(pos, r, h) {
         const x0 = pos.x - r, x1 = pos.x + r, y0 = pos.y + 0.001, y1 = pos.y + h, z0 = pos.z - r, z1 = pos.z + r;
-        if (x0 < 0 || x1 > ROOM.w || z0 < 0 || z1 > ROOM.d || y1 > ROOM.h) return true;
-        for (const c of this.staticColliders) {
+        if (x0 < 0 || x1 > TOWN.w || z0 < 0 || z1 > TOWN.d) return true;
+        for (const c of this.town.grid.query(x0, z0, x1, z1, this.near_)) {
+            if (c.off) continue;
             if (x1 > c.min.x && x0 < c.max.x && y1 > c.min.y && y0 < c.max.y && z1 > c.min.z && z0 < c.max.z) return true;
-        }
-        for (const p of this.props.blockers()) {
-            const b = p.body.position, s = p.def.size;
-            if (x1 > b.x - s[0] / 2 && x0 < b.x + s[0] / 2 && y1 > b.y - s[1] / 2 && y0 < b.y + s[1] / 2 && z1 > b.z - s[2] / 2 && z0 < b.z + s[2] / 2) return true;
         }
         return false;
     }
@@ -176,10 +197,17 @@ export class Game {
                     c.pos.copy(np);
                     continue;
                 }
-                // 小さな段差は乗り越える
+                // 段差・階段は歩いて登る
                 if (c.onGround) {
-                    np.y += 0.05;
-                    if (!this.overlaps(np, r, h)) {
+                    let up = false;
+                    for (let k = 0.04; k <= CFG.STEP_UP + 0.001; k += 0.04) {
+                        np.y = c.pos.y + k;
+                        if (!this.overlaps(np, r, h)) {
+                            up = true;
+                            break;
+                        }
+                    }
+                    if (up) {
                         c.pos.copy(np);
                         continue;
                     }
@@ -190,26 +218,33 @@ export class Game {
         return false;
     }
 
+    near(p, dist) {
+        return Math.hypot(p.x - this.camera.position.x, p.z - this.camera.position.z) < dist;
+    }
+
     // ---------------------------------------------------------------- 更新
 
     update(dt) {
         if (this.state === 'idle') return;
+        this.time += dt;
         const c = this.cat;
         if (this.state === 'play') {
-            this.time += dt;
+            Save.data.playTime = (Save.data.playTime || 0) + dt;
             this.updateCat(dt);
             if (this.state === 'play') this.updateEating(dt);
-            if (this.state === 'play') this.updateWorldThings(dt);
-            if (this.state === 'play') this.updateObjectives(dt);
-            if (this.state === 'play' && this.stage.timeLimit && this.time >= this.stage.timeLimit) this.fail('time');
+            if (this.state === 'play') this.updatePlaces(dt);
+            this.saveT -= dt;
+            if (this.saveT <= 0) {
+                this.saveT = 5;
+                Save.data.weight = c.w;
+                Save.save();
+            }
         }
-        this.world.step(1 / 60, dt, 4);
-        this.props.update(dt);
-        this.updateCatBody(dt);
+        this.updateTown(dt);
         this.updateFx(dt);
         c.vw += (c.w - c.vw) * Math.min(1, dt * 6);
-        this.model.update(this.visualState(dt), dt);
-        this.syncModel(dt);
+        this.model.update(this.visualState(), dt);
+        this.syncModel();
         this.updateCamera(dt);
         this.hud.update(this, dt);
     }
@@ -231,7 +266,6 @@ export class Game {
 
     updateCat(dt) {
         const c = this.cat;
-        const { b } = this.dims();
         c.punchT = Math.max(0, c.punchT - dt);
         c.punchCd -= dt;
         c.high = Math.max(0, c.high - dt);
@@ -273,17 +307,17 @@ export class Game {
         const wantDash = (this.keys.ShiftLeft || this.keys.ShiftRight) && dir.lengthSq() > 0 && c.onGround && !c.charging;
         c.dashing = wantDash && !c.tired && c.stamina > 0;
         if (c.dashing) {
-            c.stamina = Math.max(0, c.stamina - dt * (0.22 + c.w * 0.012));
+            c.stamina = Math.max(0, c.stamina - dt * (0.16 + c.w * 0.01));
             if (c.stamina <= 0) {
                 c.tired = true;
                 this.hud.floatText(this.headPos(), 'ゼェ… ゼェ…', '#ffffff', 20, 1.4);
                 if (c.w >= 20) this.sayOnce('tired', ['デブは走れない', 'スタミナも体重に比例して減る']);
             }
         } else {
-            c.stamina = Math.min(1, c.stamina + dt * (c.tired ? 0.18 : 0.3));
+            c.stamina = Math.min(1, c.stamina + dt * (c.tired ? 0.2 : 0.32));
             if (c.tired && c.stamina > 0.35) c.tired = false;
         }
-        let spd = CFG.speed(c.w) * (c.dashing ? 2.0 : c.tired ? 0.7 : 1) * (c.high > 0 ? 1.4 : 1);
+        let spd = CFG.speed(c.w) * (c.dashing ? 1.9 : c.tired ? 0.7 : 1) * (c.high > 0 ? 1.4 : 1);
         if (c.charging) spd *= 0.25;
         if (c.squeeze) spd *= 0.5;
         if (busy) spd = 0;
@@ -291,15 +325,7 @@ export class Game {
         const f = Math.min(1, grip * dt);
         c.vel.x += (dir.x * spd - c.vel.x) * f;
         c.vel.z += (dir.z * spd - c.vel.z) * f;
-
         if (c.charging) c.charge = Math.min(1, c.charge + dt / 0.6);
-
-        // ボス戦: ルンバ大魔王に吸い寄せられる
-        if (this.boss && this.boss.alive) {
-            const d = new THREE.Vector3().subVectors(this.boss.pos, c.pos).setY(0);
-            const dist = d.length();
-            if (dist < this.boss.r + 1.2 && dist > 0.01) c.vel.addScaledVector(d.normalize(), 0.8 * dt);
-        }
 
         const wasGround = c.onGround;
         const vy = c.vel.y;
@@ -334,7 +360,7 @@ export class Game {
         let dh = target - c.heading;
         dh = Math.atan2(Math.sin(dh), Math.cos(dh));
         c.heading += dh * Math.min(1, dt * 10);
-        let look = this.yaw - c.heading;
+        const look = this.yaw - c.heading;
         c.lookYaw = Math.atan2(Math.sin(look), Math.cos(look)) * 0.6;
 
         // 放っておくと香箱座り → 寝る
@@ -352,7 +378,8 @@ export class Game {
                 this.hud.floatText(this.headPos(), 'Zzz', '#ffffff', 18, 1.4);
             }
         }
-        if (c.pos.y < -1) c.pos.set(4, 0, 3.5);
+        this.pushDoor(dir, dt);
+        if (c.pos.y < -1) c.pos.copy(this.sp.home);
     }
 
     wake() {
@@ -369,19 +396,46 @@ export class Game {
         const c = this.cat;
         const impact = -vy;
         if (impact < 1.5) return;
+        this.model.land(impact);
         SFX.play('land', c.w);
         if (c.w >= 30 && impact > 3) {
             this.shake = Math.min(0.08, c.w / 1000);
             this.hud.floatText(c.pos.clone(), 'ドスン', '#ffd166', 22);
-            // 重い着地は周りの小物を揺らす
-            this.props.items.forEach(p => {
-                if (p.broken || p.body.type !== CANNON.Body.DYNAMIC) return;
-                const d = p.body.position.distanceTo(new CANNON.Vec3(c.pos.x, c.pos.y, c.pos.z));
-                if (d < 1.2) {
-                    p.body.wakeUp();
-                    p.body.velocity.y += (1.2 - d) * c.w * 0.03;
-                }
-            });
+        }
+        if (impact > 7) this.sayOnce('bigfall', ['猫は高いところから落ちても平気', '着地は満点']);
+    }
+
+    // 路地裏の重い扉: 内側から 35kg 以上で押すと開く
+    pushDoor(dir, dt) {
+        const d = this.door;
+        const c = this.cat;
+        d.msgT -= dt;
+        if (d.open > 0) {
+            d.openT -= dt;
+            const inWay = c.pos.x > 5.7 && c.pos.x < 7.5 && c.pos.z > 28.8 && c.pos.z < 31.2;
+            if (d.openT <= 0 && !inWay) {
+                d.open = 0;
+                d.box.off = false;
+                SFX.play('thud', 40);
+                this.hud.floatText(new THREE.Vector3(6.6, 1.5, 29.6), 'バタン', '#ffffff', 22);
+            }
+            return;
+        }
+        const { r } = this.dims();
+        if (c.pos.x + r < 6 || c.pos.x - r > 7.2 || c.pos.y > 1) return;
+        const inside = c.pos.z < 29.45 && c.pos.z + r > 29.38 && dir.z > 0.5;
+        const outside = c.pos.z > 29.75 && c.pos.z - r < 29.82 && dir.z < -0.5;
+        if (inside && c.w >= 35) {
+            d.open = 1;
+            d.openT = 5;
+            d.box.off = true;
+            SFX.play('thud', 60);
+            this.shake = 0.03;
+            this.hud.floatText(this.headPos(), 'ギィィ…', '#ffd166', 26);
+            this.sayOnce('door', ['体重で扉をこじ開けた', 'デブは扉も開けられる']);
+        } else if ((inside || outside) && d.msgT <= 0) {
+            d.msgT = 1.5;
+            this.hud.floatText(this.headPos(), inside ? `ビクともしない（${(35 - c.w).toFixed(1)}kg 足りない）` : '外からは開かない', '#ffffff', 20);
         }
     }
 
@@ -413,7 +467,7 @@ export class Game {
         SFX.play('jump');
     }
 
-    // 猫パンチ: 見ている方向の小物を叩き飛ばし、ネズミを仕留める
+    // 猫パンチ: 見ている方向のゴミ箱・カラス・ネズミ・ボスに当たる
     punch() {
         const c = this.cat;
         if (this.state !== 'play' || c.stuck || c.punchCd > 0 || c.hackT > 0) return;
@@ -424,36 +478,54 @@ export class Game {
         const fwd = new THREE.Vector3(Math.cos(this.yaw), 0, Math.sin(this.yaw));
         const reach = CFG.punchReach(c.w);
         const { b } = this.dims();
-        const origin = c.pos.clone().addScaledVector(fwd, b.length * 0.35);
-        const inReach = (p, extra) => {
+        const origin = c.pos.clone().addScaledVector(fwd, b.length * 0.3);
+        const inReach = (p, extra, dyMax = 0.5) => {
             const d = new THREE.Vector3(p.x - origin.x, 0, p.z - origin.z);
             const dist = d.length();
             if (dist > reach + extra) return false;
-            if (dist > 0.05 && d.normalize().dot(fwd) < 0.35) return false;
-            return p.y > c.pos.y - 0.12 && p.y < c.pos.y + b.height + 0.25;
+            if (dist > 0.05 && d.normalize().dot(fwd) < 0.3) return false;
+            return p.y > c.pos.y - 0.3 && p.y < c.pos.y + b.height + dyMax;
         };
         SFX.play('swipe');
-        this.clawFx(origin.clone().addScaledVector(fwd, reach * 0.6).setY(c.pos.y + b.height * 0.7), this.yaw);
+        this.clawFx(origin.clone().addScaledVector(fwd, reach * 0.6).setY(c.pos.y + b.height * 0.6), this.yaw);
         let hit = false;
-        this.props.items.forEach(p => {
-            if (p.broken) return;
-            const pos = p.body.position;
-            if (!inReach(pos, Math.max(p.def.size[0], p.def.size[2] || p.def.size[0]) * 0.5)) return;
-            this.props.impulse(p, fwd, CFG.punchPower(c.w));
+        this.trash.forEach(t => {
+            if (t.down || !inReach(t.pos, 0.27)) return;
+            t.knock(fwd.x, fwd.z);
             hit = true;
+            SFX.play('thud', 20);
+            this.hud.floatText(t.pos.clone().setY(0.9), 'ガシャーン', '#ffffff', 22);
+            const n = 1 + (Math.random() < 0.5 ? 1 : 0);
+            for (let k = 0; k < n; k++) {
+                const type = ['bone', 'zanpan', 'bento', 'treat', 'bone'][Math.floor(Math.random() * 5)];
+                const f = new Food(this.scene, type, t.pos.x + fwd.x * 0.4, 0.4, t.pos.z + fwd.z * 0.4);
+                f.toss(fwd.x * (1 + Math.random()) + (Math.random() - 0.5), 2, fwd.z * (1 + Math.random()) + (Math.random() - 0.5), 0);
+                f.life = 60;
+                this.foods.push(f);
+            }
+            this.sayOnce('trash', ['ゴミ箱は猫の冷蔵庫', '町の美化にご協力ください']);
+        });
+        this.crows.forEach(cr => {
+            if (inReach(cr.pos, 0.2, 0.8) && cr.scare(this)) hit = true;
         });
         this.mice.forEach(m => {
             if (!m.alive || !inReach(m.pos, 0.05)) return;
             m.remove();
-            this.foods.push(new Food(this.scene, 'mouse', m.pos.x, 0, m.pos.z, -m.dir));
+            const f = new Food(this.scene, 'mouse', m.pos.x, 0, m.pos.z);
+            f.life = 60;
+            this.foods.push(f);
             this.hud.floatText(m.pos.clone().setY(0.2), 'しとめた!', '#ffd166', 22);
             SFX.play('squeak');
             hit = true;
         });
-        [...this.roombas, this.boss].forEach(r => {
-            if (!r || !r.alive || !inReach(r.pos, r.r)) return;
-            r.turn = 0.6;
-            r.pos.addScaledVector(fwd, 0.08 + c.w * 0.004);
+        Object.values(this.bosses).forEach(bs => {
+            if (bs.state === 'defeated' || !inReach(bs.pos, bs.r)) return;
+            bs.takeHit(this, fwd);
+            hit = true;
+        });
+        this.npcs.forEach(n => {
+            if (!inReach(n.pos, 0.12)) return;
+            this.hud.bubble(n, 'いたっ! なにすんのさ', 2.5);
             hit = true;
         });
         if (hit) SFX.play('hit');
@@ -478,10 +550,19 @@ export class Game {
         const amt = CFG.spitAmount(c.w);
         const fwd = new THREE.Vector3(Math.cos(c.heading), 0, Math.sin(c.heading));
         const mouth = this.headPos().addScaledVector(fwd, 0.05);
-        const p = this.props.add('hairball', mouth.x, Math.max(0.02, mouth.y - 0.03), mouth.z);
-        p.body.velocity.set(fwd.x * 1.5, 0.8, fwd.z * 1.5);
+        const ball = part(new THREE.SphereGeometry(0.03 + amt * 0.004, 8, 6), toon(0xb58a5e), 0.003);
+        ball.position.copy(mouth);
+        this.scene.add(ball);
+        const v = new THREE.Vector3(fwd.x * 1.5, 0.8, fwd.z * 1.5);
+        const floor = c.pos.y;
+        this.fx.push({ obj: ball, t: 0, dur: 5, step: (k, dt) => {
+            if (ball.position.y > floor + 0.03) {
+                v.y -= 9.8 * dt;
+                ball.position.addScaledVector(v, dt);
+            } else ball.position.y = floor + 0.03;
+        } });
         this.hud.floatText(this.headPos(), `オエッ -${amt}kg`, '#c9a27e', 20);
-        this.setWeight(c.w - amt, 'spit');
+        this.setWeight(c.w - amt);
     }
 
     meow() {
@@ -491,6 +572,22 @@ export class Game {
         c.meowT = 0.5;
         SFX.play('meow', c.w > 40 ? 0.7 : 1.1);
         this.hud.floatText(this.headPos(), c.w > 40 ? 'ンナ゛ァ〜' : 'ニャー', '#ffffff', 22);
+        const dist = p => Math.hypot(p.x - c.pos.x, p.z - c.pos.z);
+        this.npcs.forEach(n => { if (dist(n.pos) < 3.2) n.talk(this); });
+        Object.values(this.bosses).forEach(b => { if (dist(b.pos) < 3.2 && Math.abs(b.pos.y - c.pos.y) < 1) b.talk(this); });
+        this.crows.forEach(cr => { if (dist(cr.pos) < 4) cr.scare(this); });
+        const gm = this.humans.find(h => h.kind === 'grandma');
+        if (gm && dist(gm.pos) < 2.6) {
+            if ((this.grandmaT || 0) < this.time) {
+                this.grandmaT = this.time + 12;
+                const f = new Food(this.scene, 'treat', gm.pos.x + 0.2, 0, gm.pos.z + 0.9);
+                f.life = 60;
+                this.foods.push(f);
+                this.hud.bubble(gm, c.w >= 30 ? 'あらまぁ、ずいぶん立派になって' : 'あらまぁ、かわいい猫ちゃん。はい、おやつ', 3.5);
+            } else this.hud.bubble(gm, 'さっきあげたでしょう', 2.5);
+        }
+        const fm = this.humans.find(h => h.kind === 'fishmonger');
+        if (fm && dist(fm.pos) < 3) this.hud.bubble(fm, c.w >= 30 ? 'でかっ… 何食ったらそうなるんだ' : '売りもんはやらねえぞ', 2.5);
     }
 
     headPos() {
@@ -514,10 +611,10 @@ export class Game {
         for (const f of this.foods) {
             if (!f.alive || f.falling > 0) continue;
             const dy = f.pos.y - c.pos.y;
-            if (dy < -0.1 || dy > b.height * 0.9) continue;
+            if (dy < -0.15 || dy > b.height * 0.9) continue;
             const d = Math.hypot(f.pos.x - mouth.x, f.pos.z - mouth.z);
-            if (d > 0.1 + b.head + b.width * 0.2) continue;
-            c.eatT = f.type === 'toy' ? 0.2 : 0.45;
+            if (d > 0.12 + b.head + b.width * 0.2) continue;
+            c.eatT = 0.45;
             c.eatFood = f;
             c.vel.x = c.vel.z = 0;
             this.wake();
@@ -527,7 +624,7 @@ export class Game {
         // ネズミは触れたら捕まえて食べる
         for (const m of this.mice) {
             if (!m.alive || c.pos.y > 0.1) continue;
-            if (Math.hypot(m.pos.x - mouth.x, m.pos.z - mouth.z) < 0.08 + b.width * 0.3) {
+            if (Math.hypot(m.pos.x - mouth.x, m.pos.z - mouth.z) < 0.1 + b.width * 0.3) {
                 m.remove();
                 SFX.play('squeak');
                 const food = new Food(this.scene, 'mouse', m.pos.x, 0, m.pos.z);
@@ -545,15 +642,8 @@ export class Game {
         c.eatFood = null;
         if (!f || !f.alive) return;
         const kg = f.bite();
-        const done = !f.alive || f.bites <= 0;
-        if (done) this.eaten[f.type] = (this.eaten[f.type] || 0) + 1;
+        if (!f.alive) this.scheduleRespawn(f);
         const pos = this.headPos();
-        if (f.type === 'toy') {
-            f.remove();
-            SFX.play('meow', 1.3);
-            this.hud.floatText(pos, 'おもちゃ ゲット!', '#3fdc7f', 24);
-            return;
-        }
         if (f.type === 'catnip') {
             c.high = CFG.HIGH_TIME;
             SFX.play('meow', 1.5);
@@ -563,11 +653,24 @@ export class Game {
             SFX.play(kg >= 1 ? 'gulp' : 'eat');
             this.hud.floatText(pos, `${f.type === 'mouse' ? 'ムシャ' : 'モグ'} +${Math.round(kg * 10) / 10}kg`, '#ffd166', kg >= 1 ? 24 : 20);
         }
-        if (done && f.type !== 'kibble') f.remove();
-        this.setWeight(c.w + kg, 'eat');
+        this.setWeight(c.w + kg);
     }
 
-    setWeight(nw, cause) {
+    scheduleRespawn(f) {
+        const r = f.spawn;
+        if (!r || !r.food) return;
+        r.food = null;
+        r.timer = FOODS[r.type].respawn || 30;
+    }
+
+    crowSteal(crow, f) {
+        f.remove();
+        this.scheduleRespawn(f);
+        this.hud.floatText(f.pos.clone().setY(f.pos.y + 0.4), `カラスに${f.def.name}を取られた!`, '#ff9aa8', 20, 1.6);
+        this.sayOnce('crow', ['カラスは町の強敵', 'パンチか鳴き声で追い払え']);
+    }
+
+    setWeight(nw) {
         const c = this.cat;
         nw = Math.round(nw * 10) / 10;
         const grew = nw > c.w;
@@ -581,13 +684,12 @@ export class Game {
                 this.say(line);
             }
         });
-        this.props.updatePushable(nw);
         this.updateCatShape();
         if (grew) this.resolveGrow();
         else if (c.stuck) this.tryUnstuck();
     }
 
-    // 太って家具にめり込んだら押し出す。出られなければ詰まる
+    // 太って壁にめり込んだら押し出す。出られなければ詰まる
     resolveGrow() {
         const c = this.cat;
         const { r, H, hc } = this.dims();
@@ -640,173 +742,170 @@ export class Game {
 
     updateCatShape() {
         const c = this.cat;
-        const b = CFG.body(c.w);
-        if (Math.abs(this.catShapeW - c.w) < 0.05) return;
-        this.catShapeW = c.w;
-        while (this.catBody.shapes.length) this.catBody.removeShape(this.catBody.shapes[0]);
-        this.catBody.addShape(new CANNON.Box(new CANNON.Vec3(b.length / 2, b.height / 2, Math.max(0.07, b.width / 2))));
+        c.r = this.dims().r;
     }
 
-    updateCatBody() {
-        const c = this.cat;
-        if (!c) return;
-        const b = CFG.body(c.w);
-        const h = c.squeeze ? b.height * CFG.CROUCH_RATIO : b.height;
-        this.catBody.position.set(c.pos.x, c.pos.y + h / 2, c.pos.z);
-        this.catBody.velocity.set(c.vel.x, c.vel.y, c.vel.z);
-        this.catBody.quaternion.setFromEuler(0, -c.heading, 0);
-    }
-
-    // ---------------------------------------------------------------- 周りのもの
-
-    updateWorldThings(dt) {
-        const c = this.cat;
-        const { b, r } = this.dims();
-        const t = this.time;
-
-        this.foods.forEach(f => f.update(dt, t));
-        this.mice = this.mice.filter(m => m.alive);
-        this.mice.forEach(m => m.update(dt, this));
-        this.mouseT -= dt;
-        if (this.mouseT <= 0) {
-            this.mouseT = 6;
-            if (this.mice.length < (this.stage.mice || 0)) this.spawnMouse(false);
-        }
-
-        // ルンバ: 当たるとびっくりして跳ねる
-        this.roombas.forEach(rb => {
-            rb.update(dt, this);
-            const d = Math.hypot(rb.pos.x - c.pos.x, rb.pos.z - c.pos.z);
-            if (d < rb.r + r && c.pos.y < 0.12 && c.scaredT <= 0 && !c.stuck) {
-                this.scare(Math.atan2(c.pos.z - rb.pos.z, c.pos.x - rb.pos.x), 0.45, 'フギャッ!!');
-                rb.turn = 0.8;
-            }
-        });
-
-        if (this.boss && this.boss.alive) this.updateBoss(dt);
-
-        this.cucumbers.forEach(k => {
-            k.cool -= dt;
-            if (k.cool > 0 || c.airT > 0 || c.stuck) return;
-            if (Math.hypot(k.pos.x - c.pos.x, k.pos.z - c.pos.z) > r + 0.28) return;
-            k.cool = 2.5;
-            this.scare(Math.atan2(c.pos.z - k.pos.z, c.pos.x - k.pos.x), 0.75, 'フギャーッ!!');
-            this.sayOnce('scared', NARRATOR.scared);
-        });
-
-        // おやつの雨
-        if (this.stage.rain) {
-            this.rainT -= dt;
-            if (this.rainT <= 0 && this.foods.filter(f => f.alive).length < 30) {
-                this.rainT = this.stage.rain * (0.5 + Math.random());
-                for (let k = 0; k < 10; k++) {
-                    const x = 0.6 + Math.random() * 5, z = 1.3 + Math.random() * 5;
-                    if (this.footprintBlocked(x, z, 0.1)) continue;
-                    const f = new Food(this.scene, Math.random() < 0.3 ? 'fish' : 'treat', x, 0, z, Math.random() * 6);
-                    f.falling = 1;
-                    this.foods.push(f);
-                    break;
-                }
-            }
-        }
-        this.foods = this.foods.filter(f => f.alive || f.type === 'kibble');
-    }
-
-    scare(angle, height, text) {
+    scare(angle, height, text, speed = 2.2) {
         const c = this.cat;
         this.wake();
         c.charging = false;
         c.eatT = 0;
         c.eatFood = null;
-        c.scaredT = 1.2;
-        c.vel.set(Math.cos(angle) * 2.2, Math.sqrt(2 * CFG.GRAVITY * height), Math.sin(angle) * 2.2);
+        c.scaredT = 1.0;
+        c.vel.set(Math.cos(angle) * speed, Math.sqrt(2 * CFG.GRAVITY * height), Math.sin(angle) * speed);
         c.onGround = false;
         SFX.play('hiss');
         this.shake = 0.02;
         this.hud.floatText(this.headPos(), text, '#ff4d6d', 28);
     }
 
-    updateBoss(dt) {
-        const bs = this.boss;
+    // ---------------------------------------------------------------- 町の出来事
+
+    dogBite(dog) {
         const c = this.cat;
-        const { b } = this.dims();
-        bs.update(dt, this);
-        // 近くのおやつを吸い込んで大きくなる
-        this.foods.forEach(f => {
-            if (!f.alive || f.falling > 0 || f.pos.y > 0.05) return;
-            const dx = bs.pos.x - f.pos.x, dz = bs.pos.z - f.pos.z;
-            const d = Math.hypot(dx, dz);
-            if (d > bs.r + 0.5) return;
-            f.pos.x += dx / d * dt * 0.8;
-            f.pos.z += dz / d * dt * 0.8;
-            f.mesh.position.x = f.pos.x;
-            f.mesh.position.z = f.pos.z;
-            if (d < bs.r) {
-                f.remove();
-                bs.setRadius(Math.min(0.8, bs.r + 0.012));
-                if ((this.bossMsgT || 0) < this.time) {
-                    this.hud.floatText(bs.pos.clone().setY(0.4), 'ルンバが食べた', '#ff4d6d', 20);
-                    this.bossMsgT = this.time + 1.5;
-                }
+        this.scare(Math.atan2(c.pos.z - dog.pos.z, c.pos.x - dog.pos.x), 0.5, 'ギャッ!!', 3);
+        this.sayOnce('dog', ['犬は猫の天敵', '30kg あれば犬も黙る…かも']);
+    }
+
+    broomHit(fm) {
+        const c = this.cat;
+        if (c.w >= 30) {
+            this.hud.floatText(this.headPos(), '…重くて動かない', '#ffffff', 22);
+            this.hud.bubble(fm, 'ぐっ… びくともしねえ!!', 2.5);
+            this.sayOnce('broomFail', ['ほうきの敗北', '重さこそ力']);
+            return;
+        }
+        this.scare(-Math.PI / 2 + (Math.random() - 0.5) * 0.4, 0.6, 'フギャッ!!', 3.2);
+        this.sayOnce('broom', NARRATOR.broom);
+    }
+
+    bossHit(bs) {
+        const c = this.cat;
+        const ratio = bs.w / c.w;
+        if (ratio < 0.6) {
+            this.hud.floatText(this.headPos(), 'びくともしない', '#3fdc7f', 22);
+            return;
+        }
+        this.scare(Math.atan2(c.pos.z - bs.pos.z, c.pos.x - bs.pos.x), 0.25 + Math.min(0.4, ratio * 0.15), 'ぐはっ', 2 * Math.min(2.2, ratio));
+    }
+
+    truckHit() {
+        if (this.state !== 'play') return;
+        this.shake = 0.12;
+        SFX.play('boom');
+        this.fail('car');
+    }
+
+    onBossEngage(bs) {
+        this.activeBoss = bs;
+        SFX.play('warn');
+        this.hud.bossBanner(bs);
+        const ratio = this.cat.w / bs.w;
+        if (ratio < 0.75) this.say(`${bs.def.name}は ${bs.w}kg。今のままだとパンチが効かない`);
+        else this.say(NARRATOR.pick(['ファイッ!', '猫同士の戦いが始まった', '縄張り争いだ']));
+    }
+
+    onBossDisengage(bs) {
+        if (this.activeBoss === bs) this.activeBoss = null;
+        this.say('逃げた。体力は回復された');
+    }
+
+    onBossDefeated(bs) {
+        if (this.activeBoss === bs) this.activeBoss = null;
+        Save.data.bosses[bs.id] = true;
+        Save.save();
+        SFX.play('clear');
+        this.shake = 0.04;
+        const n = BOSS_IDS.filter(id => Save.data.bosses[id]).length;
+        this.hud.banner(`${bs.def.name} に勝った!!`, n >= 3 ? '神社の「町内会長の座」へ向かえ!' : `ボス ${n}/3`);
+        this.say(n >= 3 ? '町のボスを全員倒した。神社へ!' : NARRATOR.pick(['デブの勝利', '体重は正義', '縄張りを奪った']));
+    }
+
+    // 場所ごとの仕掛け: バッジ・焼き台・町内会長の座
+    updatePlaces(dt) {
+        const c = this.cat;
+        this.badges.forEach(bd => {
+            if (!bd.alive) return;
+            const dy = c.pos.y - bd.pos.y;
+            if (Math.hypot(bd.pos.x - c.pos.x, bd.pos.z - c.pos.z) < 0.25 + c.r * 0.6 && dy > -0.35 && dy < 0.5) {
+                bd.remove();
+                Save.data.badges.push(bd.id);
+                Save.save();
+                SFX.play('pop');
+                SFX.play('clear');
+                this.hud.floatText(this.headPos(), `猫缶バッジ ゲット! ${Save.data.badges.length}/10`, '#ffd166', 26, 1.8);
+                if (Save.data.badges.length >= 10) this.say('バッジ全部集めた。暇なの?');
             }
         });
-        const d = Math.hypot(bs.pos.x - c.pos.x, bs.pos.z - c.pos.z);
-        if (d < bs.r + b.width * 0.45 && c.pos.y < 0.3) {
-            if (b.width > bs.r * 2) {
-                // 丸のみ
-                bs.remove();
-                this.bossEaten = true;
-                SFX.play('gulp');
-                this.shake = 0.06;
-                this.hud.floatText(this.headPos(), 'ルンバ大魔王 丸のみ!! +10kg', '#ffd166', 32);
-                this.say('ルンバを食べる猫。前代未聞');
-                this.setWeight(c.w + 10, 'eat');
-            } else if ((this.bossHitT || 0) < this.time) {
-                this.bossHitT = this.time + 1.2;
-                this.scare(Math.atan2(c.pos.z - bs.pos.z, c.pos.x - bs.pos.x), 0.3, '吸われた! -2kg');
-                this.setWeight(c.w - 2, 'sucked');
+        this.badges = this.badges.filter(b => b.alive);
+        // 焼き台の上は熱い
+        for (const g of this.sp.grills) {
+            if (c.onGround && c.pos.y >= g.min.y - 0.05 && c.pos.x > g.min.x && c.pos.x < g.max.x && c.pos.z > g.min.z && c.pos.z < g.max.z && c.scaredT <= 0) {
+                this.scare(-Math.PI / 2, 0.6, 'アチチッ!!', 1.5);
+                this.sayOnce('grill', ['焼き猫になるところだった', '焼き台に乗るな']);
             }
+        }
+        // 町内会長の座
+        const s = this.sp.seat;
+        const onSeat = c.onGround && Math.abs(c.pos.y - s.y) < 0.06 && c.pos.x > s.x0 && c.pos.x < s.x1 && c.pos.z > s.z0 && c.pos.z < s.z1;
+        if (onSeat) {
+            const n = BOSS_IDS.filter(id => Save.data.bosses[id]).length;
+            if (n < 3) {
+                if (!c.seatMsg) {
+                    c.seatMsg = true;
+                    this.hud.floatText(this.headPos(), `まだ座る資格がない（ボス ${n}/3）`, '#ffffff', 22, 2);
+                }
+            } else {
+                c.seatT += dt;
+                if (c.seatT > 1.5 && !Save.data.cleared) this.ending();
+            }
+        } else {
+            c.seatT = 0;
+            c.seatMsg = false;
         }
     }
 
-    // ---------------------------------------------------------------- 目標
-
-    updateObjectives(dt) {
-        const c = this.cat;
-        this.objectives.forEach(o => {
-            if (o.done) return;
-            switch (o.type) {
-                case 'eat': o.done = (this.eaten[o.food] || 0) >= 1; break;
-                case 'collect': o.done = (this.eaten[o.food] || 0) >= 1; break;
-                case 'treats': o.done = (this.eaten.treat || 0) >= o.count; break;
-                case 'damage': o.done = this.damage >= o.yen; break;
-                case 'eatBoss': o.done = this.bossEaten; break;
-                case 'knock':
-                    o.done = o.ids.every(id => this.props.items.some(p => p.id === id && (p.broken || p.knocked)));
-                    break;
-                case 'stay': {
-                    const [x0, y0, z0, x1, y1, z1] = o.region;
-                    const inside = c.pos.x > x0 && c.pos.x < x1 && c.pos.y >= y0 && c.pos.y < y1 && c.pos.z > z0 && c.pos.z < z1 && c.onGround;
-                    o.timer = inside ? o.timer + dt : 0;
-                    if (o.timer >= o.secs) o.done = true;
-                    break;
-                }
-            }
-            if (o.done) {
-                SFX.play('pop');
-                this.hud.floatText(this.headPos(), `✔ ${o.label}`, '#3fdc7f', 22, 1.6);
+    // 住人・食べ物の復活・演出
+    updateTown(dt) {
+        const t = this.time;
+        this.foods.forEach(f => {
+            f.update(dt);
+            if (f.life !== undefined) {
+                f.life -= dt;
+                if (f.life <= 0 && f !== this.cat.eatFood) f.remove();
             }
         });
-        if (this.objectives.every(o => o.done)) this.clear();
-    }
-
-    onBreak(p, pos) {
-        SFX.play('shatter');
-        if (!p.def.price) return;
-        this.damage += p.def.price;
-        Save.data.damageTotal = (Save.data.damageTotal || 0) + p.def.price;
-        this.hud.floatText(pos, `ガシャーン!! ${p.def.name} ¥${p.def.price.toLocaleString()}`, '#ff9aa8', p.def.price >= 50000 ? 26 : 20, 1.6);
-        if (p.def.price >= 10000) this.say(NARRATOR.pick(NARRATOR.smash));
+        this.foods = this.foods.filter(f => f.alive);
+        this.spawnRecs.forEach(r => {
+            if (r.food) return;
+            r.timer -= dt;
+            if (r.timer > 0) return;
+            if (Math.hypot(r.x - this.cat.pos.x, r.z - this.cat.pos.z) < 2) return;
+            r.food = new Food(this.scene, r.type, r.x, r.y, r.z, r);
+            this.foods.push(r.food);
+        });
+        this.badges.forEach(b => b.update(dt, t));
+        this.trash.forEach(tc => tc.update(dt));
+        this.mice = this.mice.filter(m => m.alive);
+        this.mice.forEach(m => m.update(dt, this));
+        this.mouseT -= dt;
+        if (this.mice.length < this.sp.mice.count && this.mouseT <= 0) {
+            this.mouseT = 20;
+            this.mice.push(new Mouse(this.scene, this.sp.mice));
+        }
+        if (this.state === 'play') {
+            this.crows.forEach(cr => cr.update(dt, this));
+            this.dog.update(dt, this);
+            this.humans.forEach(h => h.update(dt, this));
+        }
+        if (this.state !== 'idle') this.truck.update(dt, this);
+        this.npcs.forEach(n => n.update(dt, this));
+        Object.values(this.bosses).forEach(b => b.update(dt, this));
+        // 扉のアニメーション
+        const d = this.door;
+        const target = d.open ? 1 : 0;
+        d.k = (d.k || 0) + (target - (d.k || 0)) * Math.min(1, dt * 6);
+        d.mesh.rotation.y = -d.k * 1.5;
     }
 
     say(text) {
@@ -827,49 +926,77 @@ export class Game {
         if (this.state !== 'play') return;
         this.state = 'fail';
         Save.data.deaths++;
+        Save.data.weight = CFG.START_WEIGHT;
         Save.save();
         const line = NARRATOR.death(reason, Save.data.deaths);
         this.say(line);
         SFX.play(reason === 'burst' ? 'boom' : 'fail');
-        if (reason === 'burst') {
+        if (reason === 'burst' || reason === 'car') {
             this.shake = 0.1;
             this.model.root.visible = false;
             this.burstFx();
         }
         this.cat.stuck = reason === 'stuck';
+        this.activeBoss = null;
         this.hud.showResult('fail', {
             title: DEATHS[reason] || '失敗',
             line: `天の声「${line}」`,
-            stats: `体重 ${this.cat.w.toFixed(1)}kg　被害総額 ¥${this.damage.toLocaleString()}　総失敗 ${Save.data.deaths} 回`
-        }, () => this.onRetry && this.onRetry(), null);
+            stats: `体重 ${this.cat.w.toFixed(1)}kg　総失敗 ${Save.data.deaths} 回　（倒したボスと集めたバッジはそのまま）`,
+            retryLabel: '家から再開'
+        }, () => this.respawn(), null);
     }
 
-    clear() {
-        if (this.state !== 'play') return;
+    ending() {
         this.state = 'clear';
-        Save.data.unlocked = Math.max(Save.data.unlocked, Math.min(this.index + 1, STAGES.length - 1));
-        const best = Save.data.best[this.index];
-        const newBest = !best || this.time < best;
-        if (newBest) Save.data.best[this.index] = this.time;
+        Save.data.cleared = true;
         Save.save();
         SFX.play('clear');
         SFX.play('meow', 1.2);
-        const line = NARRATOR.pick(NARRATOR.clear);
-        this.say(line);
-        const last = this.index + 1 >= STAGES.length;
+        const mins = Math.floor(Save.data.playTime / 60), secs = Math.floor(Save.data.playTime % 60);
         this.hud.showResult('clear', {
-            title: last ? '全ステージクリア!!' : 'STAGE CLEAR!',
-            line: `天の声「${line}」`,
-            stats: `タイム ${this.time.toFixed(1)}秒${newBest ? '（自己ベスト!）' : ''}　体重 ${this.cat.w.toFixed(1)}kg　被害総額 ¥${this.damage.toLocaleString()}`,
-            nextLabel: last ? 'タイトルへ' : '次のステージ'
-        }, () => this.onRetry && this.onRetry(), () => this.onNext && this.onNext());
+            title: '町内会長 就任!!',
+            line: '天の声「こうして町は、デブ猫が治めることになった」',
+            stats: `プレイ時間 ${mins}分${secs}秒　体重 ${this.cat.w.toFixed(1)}kg　失敗 ${Save.data.deaths} 回　猫缶バッジ ${Save.data.badges.length}/10`,
+            nextLabel: '散歩を続ける'
+        }, null, () => {
+            this.hud.hideResult();
+            this.state = 'play';
+            this.say('町内会長の見回りだ');
+        });
+    }
+
+    // HUD 用: やることリスト
+    objectives() {
+        const b = Save.data.bosses;
+        const list = BOSS_IDS.map(id => ({ label: `${BOSSES[id].name}（${BOSSES[id].w}kg）を倒す`, hint: `${BOSSES[id].where}。${BOSSES[id].hint}`, done: !!b[id] }));
+        const all = list.every(o => o.done);
+        list.push({ label: '神社の「町内会長の座」に座る', hint: all ? '神社は北の階段の上' : 'ボスを 3 匹倒してから', done: !!Save.data.cleared, locked: !all });
+        return list;
+    }
+
+    // いちばん近い未達成の目標
+    focusObjective(list) {
+        if (list[3] && !list[3].locked && !list[3].done) return 3;
+        let best = -1, bd = 1e9;
+        BOSS_IDS.forEach((id, i) => {
+            if (list[i].done) return;
+            const b = this.bosses[id];
+            const d = Math.hypot(b.pos.x - this.cat.pos.x, b.pos.z - this.cat.pos.z);
+            if (d < bd) { bd = d; best = i; }
+        });
+        return best;
+    }
+
+    areaName() {
+        const p = this.cat.pos;
+        const a = this.sp.areas.find(a => p.x >= a.x0 && p.x <= a.x1 && p.z >= a.z0 && p.z <= a.z1 && (a.y === undefined || p.y >= a.y));
+        return a ? a.name : '';
     }
 
     // ---------------------------------------------------------------- 見た目
 
     visualState() {
         const c = this.cat;
-        const b = CFG.body(c.vw);
         return {
             w: c.vw, t: this.time,
             speed: Math.hypot(c.vel.x, c.vel.z),
@@ -888,8 +1015,9 @@ export class Game {
             scared: c.scaredT > 0 ? 1 : 0,
             stuck: c.stuck,
             meow: c.meowT > 0,
+            angry: !!this.activeBoss,
             lookYaw: c.lookYaw,
-            height: c.onGround ? 0 : 0
+            height: 0
         };
     }
 
@@ -907,21 +1035,19 @@ export class Game {
         this.updateCamera(1, true);
     }
 
-    // 三人称カメラ: 猫の後ろ上から。壁や家具にめり込まないように手前に寄る
+    // 三人称カメラ: 猫の後ろ上から。建物にめり込まないように手前に寄る
     updateCamera(dt, snap) {
         const c = this.cat;
         const { b, H } = this.dims();
-        const dist = 0.7 + H * 1.8 + b.width * 1.5;
-        const target = new THREE.Vector3(c.pos.x, c.pos.y + H * 0.7, c.pos.z);
+        const dist = 1.0 + H * 2.2 + b.width * 1.6;
+        const target = new THREE.Vector3(c.pos.x, c.pos.y + H * 0.8, c.pos.z);
         this.camTarget.lerp(target, snap ? 1 : Math.min(1, dt * 12));
         const dir = new THREE.Vector3(-Math.cos(this.pitch) * Math.cos(this.yaw), Math.sin(this.pitch), -Math.cos(this.pitch) * Math.sin(this.yaw));
         let d = dist;
         const hit = this.rayBoxes(this.camTarget, dir, dist);
-        if (hit < d) d = Math.max(0.15, hit - 0.08);
+        if (hit < d) d = Math.max(0.15, hit - 0.1);
         const want = this.camTarget.clone().addScaledVector(dir, d);
-        want.x = Math.max(0.08, Math.min(ROOM.w - 0.08, want.x));
-        want.z = Math.max(0.08, Math.min(ROOM.d - 0.08, want.z));
-        want.y = Math.max(0.08, Math.min(ROOM.h - 0.08, want.y));
+        want.y = Math.max(0.08, want.y);
         this.camPos.lerp(want, snap ? 1 : Math.min(1, dt * 14));
         const cam = this.camera;
         cam.position.copy(this.camPos);
@@ -933,17 +1059,21 @@ export class Game {
         cam.up.set(0, 1, 0);
         if (c.high > 0) cam.up.set(Math.sin(this.time * 1.7) * 0.12, 1, 0).normalize();
         cam.lookAt(this.camTarget);
-        const fov = c.dashing ? 64 : 55;
+        const fov = c.dashing ? 66 : 58;
         if (Math.abs(cam.fov - fov) > 0.1) {
             cam.fov += (fov - cam.fov) * Math.min(1, dt * 6);
             cam.updateProjectionMatrix();
         }
     }
 
-    // 家具や壁の箱にレイが当たる距離
+    // 建物の箱にレイが当たる距離
     rayBoxes(o, d, maxT) {
         let best = maxT;
-        for (const c of this.staticColliders) {
+        const x0 = Math.min(o.x, o.x + d.x * maxT), x1 = Math.max(o.x, o.x + d.x * maxT);
+        const z0 = Math.min(o.z, o.z + d.z * maxT), z1 = Math.max(o.z, o.z + d.z * maxT);
+        for (const c of this.town.grid.query(x0, z0, x1, z1, this.near_)) {
+            // 猫より低い生け垣や段差ではカメラを寄せない
+            if (c.off || c.noCam || c.max.y < o.y + 0.35) continue;
             let t0 = 0, t1 = best;
             let ok = true;
             for (const ax of ['x', 'y', 'z']) {
@@ -965,8 +1095,8 @@ export class Game {
         const g = new THREE.Group();
         const mat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.9 });
         for (let i = -1; i <= 1; i++) {
-            const arc = new THREE.Mesh(new THREE.TorusGeometry(0.12, 0.004, 4, 16, 1.4), mat);
-            arc.position.y = i * 0.035;
+            const arc = new THREE.Mesh(new THREE.TorusGeometry(0.14, 0.005, 4, 16, 1.4), mat);
+            arc.position.y = i * 0.04;
             arc.rotation.x = Math.PI / 2;
             g.add(arc);
         }
@@ -978,16 +1108,17 @@ export class Game {
 
     burstFx() {
         const c = this.cat;
-        const mat = new THREE.MeshStandardMaterial({ color: 0xd98a3d, roughness: 1 });
+        const mat = toon(0xffd8a0);
         for (let i = 0; i < 40; i++) {
             const m = new THREE.Mesh(new THREE.SphereGeometry(0.03 + Math.random() * 0.05, 6, 5), mat);
             m.position.copy(c.pos).setY(c.pos.y + 0.4);
             this.scene.add(m);
             const v = new THREE.Vector3((Math.random() - 0.5) * 6, 2 + Math.random() * 4, (Math.random() - 0.5) * 6);
+            const floor = c.pos.y;
             this.fx.push({ obj: m, t: 0, dur: 2.5, step: (k, dt) => {
                 v.y -= 9.8 * dt;
                 m.position.addScaledVector(v, dt);
-                if (m.position.y < 0.02) { m.position.y = 0.02; v.multiplyScalar(0.4); }
+                if (m.position.y < floor + 0.02) { m.position.y = floor + 0.02; v.multiplyScalar(0.4); }
             } });
         }
     }

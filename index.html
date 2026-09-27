@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>デブ猫、詰まる。</title>
+    <title>デブ猫、町内会長になる。</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@500;800&display=swap" rel="stylesheet">
@@ -19,7 +19,7 @@
             width: 100%;
             height: 100%;
             overflow: hidden;
-            background: #1d1712;
+            background: #a9d8f5;
             font-family: var(--font);
             color: #fff;
             user-select: none;
@@ -40,20 +40,30 @@
         #weight { font-size: 40px; font-weight: 800; line-height: 1.1; }
         #weight.danger { color: var(--red); }
         #status .row { font-size: 14px; margin-top: 3px; }
-        #status .ok { color: var(--green); }
-        #status .ng { color: var(--red); }
-        #damage { color: #ff9aa8; }
+        #area { color: var(--yellow); font-weight: 800; font-size: 15px; }
         #stamina-bar { display: inline-block; vertical-align: middle; width: 120px; height: 8px; border-radius: 4px; background: rgba(255,255,255,0.15); overflow: hidden; margin-left: 6px; }
         #stamina { display: block; height: 100%; background: var(--green); transition: background 0.2s; }
         #stamina.dash { background: var(--yellow); }
         #stamina.tired { background: var(--red); }
-        #right { position: absolute; right: 16px; top: 16px; width: 360px; text-align: right; }
-        #timer { font-size: 22px; font-weight: 800; }
-        #timer.danger { color: var(--red); }
-        #objectives { list-style: none; margin: 8px 0 0; padding: 10px 14px; text-align: left; font-size: 15px; }
+        #right { position: absolute; right: 16px; top: 16px; width: 330px; display: flex; flex-direction: column; align-items: flex-end; }
+        #minimap { width: 224px; height: 168px; border-radius: 10px; border: 3px solid rgba(255,255,255,0.85); box-shadow: 0 3px 10px rgba(0,0,0,0.35); image-rendering: auto; }
+        #objectives { list-style: none; margin: 8px 0 0; padding: 10px 14px; text-align: left; font-size: 14px; width: 100%; box-sizing: border-box; }
         #objectives li { margin: 4px 0; }
         #objectives li.done { color: var(--green); text-decoration: line-through; opacity: 0.8; }
+        #objectives li.locked { opacity: 0.6; }
+        #objectives li.badges { color: var(--yellow); margin-top: 8px; }
         #objectives .hint { display: block; font-size: 12px; color: #d8cbb8; margin-left: 1.3em; }
+        #bossbar { position: absolute; top: 16px; left: 50%; transform: translateX(-50%); width: 420px; text-align: center; }
+        #boss-name { font-size: 20px; font-weight: 800; color: #ff9aa8; }
+        #boss-track { height: 14px; border-radius: 7px; background: rgba(0,0,0,0.45); border: 2px solid #fff; overflow: hidden; margin-top: 4px; }
+        #boss-hp { height: 100%; background: linear-gradient(#ff7a8f, #e0304d); transition: width 0.2s; }
+        #boss-note { font-size: 13px; margin-top: 4px; }
+        .bubble {
+            position: absolute; left: 0; top: 0; max-width: 300px; padding: 8px 12px; border-radius: 14px;
+            background: #fffdf6; color: #3b2f2a; font-size: 15px; font-weight: 800; line-height: 1.35;
+            box-shadow: 0 3px 0 rgba(0,0,0,0.25); white-space: normal; width: max-content;
+        }
+        .bubble::after { content: ""; position: absolute; left: 50%; bottom: -9px; margin-left: -8px; border: 8px solid transparent; border-top-color: #fffdf6; border-bottom: 0; }
         #warning {
             position: absolute; top: 22%; left: 50%; transform: translateX(-50%);
             font-size: 34px; font-weight: 800; color: var(--red);
@@ -78,8 +88,8 @@
         .overlay { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; }
         #title { justify-content: space-between; padding: 40px 0 30px; box-sizing: border-box; pointer-events: none; }
         #title > * { pointer-events: auto; }
-        #title h1 { margin: 0; font-size: 84px; font-weight: 800; color: var(--yellow); text-shadow: 0 5px 0 #000, 0 0 20px rgba(0,0,0,0.6); }
-        #title .sub { font-size: 24px; font-weight: 800; margin-top: 6px; }
+        #title h1 { margin: 0; font-size: 76px; font-weight: 800; color: var(--yellow); text-shadow: 0 5px 0 #000, 0 0 20px rgba(0,0,0,0.6); }
+        #title .sub { font-size: 19px; font-weight: 800; margin-top: 6px; }
         #title .bottom { display: flex; flex-direction: column; align-items: center; gap: 12px; }
         button {
             font-family: var(--font); font-weight: 800; border: none; border-radius: 10px; cursor: pointer;
@@ -101,14 +111,14 @@
         #result .buttons { display: flex; gap: 12px; margin-top: 8px; }
         #pause { cursor: pointer; font-size: 28px; font-weight: 800; }
         #pause small { font-size: 15px; font-weight: 500; color: #d8cbb8; }
-        #loading { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 24px; background: #1d1712; }
+        #loading { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 24px; background: #a9d8f5; color: #3b2f2a; font-weight: 800; }
+        #title-new { background: #6b5a4a; box-shadow: 0 4px 0 #3b2f2a; }
     </style>
     <script type="importmap">
     {
         "imports": {
             "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
-            "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/",
-            "cannon-es": "https://cdn.jsdelivr.net/npm/cannon-es@0.20.0/dist/cannon-es.js"
+            "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
         }
     }
     </script>
@@ -118,16 +128,20 @@
 
     <div id="hud" class="hidden">
         <div id="status" class="panel">
-            <div id="stage-name"></div>
-            <div id="weight" class="stroke">3.0 kg</div>
+            <div id="area"></div>
+            <div id="weight" class="stroke">4.0 kg</div>
             <div class="row" id="jump"></div>
-            <div class="row" id="sofa"></div>
-            <div class="row" id="damage"></div>
+            <div class="row" id="width"></div>
             <div class="row">ダッシュ <span id="stamina-bar"><span id="stamina"></span></span></div>
         </div>
         <div id="right">
-            <div id="timer" class="stroke"></div>
+            <canvas id="minimap" width="224" height="168"></canvas>
             <ul id="objectives" class="panel"></ul>
+        </div>
+        <div id="bossbar" class="stroke hidden">
+            <div id="boss-name"></div>
+            <div id="boss-track"><div id="boss-hp"></div></div>
+            <div id="boss-note"></div>
         </div>
         <div id="warning" class="stroke hidden"></div>
         <div id="banner" class="stroke"></div>
@@ -138,15 +152,17 @@
 
     <div id="title" class="overlay">
         <div style="text-align:center">
-            <h1>デブ猫、詰まる。</h1>
-            <div class="sub stroke">太るほど強い。でも隙間に詰まる。100kgで破裂する。</div>
+            <h1>デブ猫、町内会長になる。</h1>
+            <div class="sub stroke">町じゅう食べ歩いて太れ。太るほどパンチは強い。でも隙間は通れない。100kgで破裂する。</div>
         </div>
         <div class="bottom">
-            <div id="title-ending" class="stroke hidden">全ステージクリアおめでとう!</div>
-            <button id="title-start">はじめる</button>
-            <div id="title-stages"></div>
+            <div id="title-ending" class="stroke hidden">町内会長 就任ずみ!</div>
+            <div style="display:flex;gap:12px">
+                <button id="title-start">はじめる</button>
+                <button id="title-new" class="hidden">はじめから</button>
+            </div>
             <div id="title-stats" class="stroke"></div>
-            <div class="stroke" style="font-size:13px;color:#d8cbb8">実況・動画投稿 大歓迎！　WASD で移動 / Shift でダッシュ / マウス or 矢印キーで見回す / スペースでジャンプ / クリック or J で猫パンチ</div>
+            <div class="stroke" style="font-size:13px;color:#fff">実況・動画投稿 大歓迎！　WASD 移動 / Shift ダッシュ / マウス or 矢印キー 見回す / スペース ジャンプ / クリック or J 猫パンチ / F 吐く / E 鳴く</div>
         </div>
     </div>
 
@@ -155,8 +171,8 @@
         <div id="result-line" class="stroke"></div>
         <div id="result-stats" class="stroke"></div>
         <div class="buttons">
-            <button id="result-retry">もう一回</button>
-            <button id="result-next">次のステージ</button>
+            <button id="result-retry">家から再開</button>
+            <button id="result-next">散歩を続ける</button>
             <button id="to-title">タイトル</button>
         </div>
     </div>
@@ -165,10 +181,10 @@
         一時停止
         <div class="buttons" style="display:flex;gap:12px">
             <button id="pause-resume">再開</button>
-            <button id="pause-retry">やり直す</button>
+            <button id="pause-retry">家に帰る</button>
             <button id="pause-title">タイトル</button>
         </div>
-        <small>マウス or 矢印キー: 見回す / WASD: 移動 / Shift: ダッシュ / スペース: ジャンプ（長押しで高く）/ クリック or J: 猫パンチ / F: 吐く / E: 鳴く</small>
+        <small>マウス or 矢印キー: 見回す / WASD: 移動 / Shift: ダッシュ / スペース: ジャンプ（長押しで高く）/ クリック or J: 猫パンチ / F: 吐く / E: 鳴く（猫に話しかける）/ M: 音を消す</small>
     </div>
 
     <div id="loading">読み込み中…</div>

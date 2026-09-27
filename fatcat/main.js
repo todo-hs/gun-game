@@ -1,10 +1,11 @@
 function startFatCat() {
+    View3D.init();
     window.fatcatGame = new Phaser.Game({
         type: Phaser.AUTO,
         width: 1280,
         height: 720,
         parent: 'game-container',
-        backgroundColor: '#0d0a14',
+        transparent: true,
         scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
         physics: {
             default: 'arcade',

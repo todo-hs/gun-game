@@ -6,16 +6,8 @@ class TitleScene extends Phaser.Scene {
 
     create(data) {
         const W = this.scale.width, H = this.scale.height;
-        this.cameras.main.setBackgroundColor('#1a1426');
-
-        // 背景の魚
-        for (let i = 0; i < 18; i++) {
-            const f = this.add.image(Math.random() * W, Math.random() * H, 'fc_fish').setAlpha(0.15).setScale(1 + Math.random());
-            this.tweens.add({ targets: f, x: f.x - 80, yoyo: true, repeat: -1, duration: 2000 + Math.random() * 2000 });
-        }
-
-        // 太ったり痩せたりする本物っぽい猫
-        this.cat = this.add.graphics().setPosition(W / 2, 330);
+        // 太ったり痩せたりする 3D の猫（View3D が後ろに描く）
+        View3D.buildTitle();
         this.catWeight = { w: 5 };
         this.tweens.add({ targets: this.catWeight, w: 60, yoyo: true, repeat: -1, duration: 2600, ease: 'Sine.easeInOut' });
 
@@ -51,9 +43,7 @@ class TitleScene extends Phaser.Scene {
     }
 
     update(time) {
-        const w = this.catWeight.w;
-        const d = FC.diameter(w) * 0.9;
-        CatArt.draw(this.cat, { ...CatArt.shape(w, d), t: time / 1000, walk: time / 1000 * 0.6 });
+        View3D.renderTitle(time, this.catWeight.w);
     }
 
     makeButton(x, y, label, size, onClick) {

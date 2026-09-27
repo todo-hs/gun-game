@@ -40,10 +40,9 @@ class GameScene extends Phaser.Scene {
         this.createGroups();
         this.createCat();
         this.spawnEntities();
-        this.createSigns();
         this.createVacuum();
         this.setupInput();
-        this.setupCamera();
+        View3D.buildGame(this);
 
         this.scene.stop('HudScene');
         this.scene.launch('HudScene');
@@ -87,18 +86,10 @@ class GameScene extends Phaser.Scene {
         const tileset = this.map.addTilesetImage('fc_tiles', 'fc_tiles_x', T, T, 1, 2);
         this.layer = this.map.createLayer(0, tileset, 0, 0);
         this.layer.setCollision([G_WALL, G_GATE, G_BOX, G_SHELF]);
+        this.layer.setVisible(false);
         this.worldW = this.W * T;
         this.worldH = this.H * T;
         this.physics.world.setBounds(0, 0, this.worldW, this.worldH);
-
-        if (this.gateTiles.length) {
-            const top = this.gateTiles.reduce((a, b) => (b.y < a.y ? b : a));
-            this.gateLabel = this.add.text((top.x + 0.5) * T, top.y * T - 6, '', {
-                fontFamily: FONT, fontSize: '18px', color: '#ff4d6d', fontStyle: 'bold',
-                backgroundColor: '#000000cc', padding: { x: 6, y: 3 }
-            }).setOrigin(0.5, 1).setDepth(15);
-            this.refreshGateLabel();
-        }
     }
 
     setTile(tx, ty, v) {
@@ -164,16 +155,8 @@ class GameScene extends Phaser.Scene {
         if (open === this.gateOpen) return;
         this.gateOpen = open;
         this.gateTiles.forEach(g => this.setTile(g.x, g.y, G_GATE));
-        this.refreshGateLabel();
         SFX.play('gate');
         if (!open && !this.fits(this.cat.x, this.cat.y, this.cat.d)) this.die('door');
-    }
-
-    refreshGateLabel() {
-        if (!this.gateLabel) return;
-        const w = this.level.gateWeight;
-        this.gateLabel.setText(this.gateOpen ? `OPEN (${w}kg以上)` : `${w}kg以上で開く`);
-        this.gateLabel.setColor(this.gateOpen ? '#3fdc7f' : '#ff4d6d');
     }
 
     breakBox(tx, ty) {
@@ -221,8 +204,6 @@ class GameScene extends Phaser.Scene {
             high: 0, scaredT: 0,
             stuck: false, stuckTimer: 0
         };
-        this.catShadow = this.add.ellipse(this.cat.x, this.cat.y, 10, 10, 0x000000, 0.3).setDepth(9);
-        this.catGfx = this.add.graphics().setDepth(10);
     }
 
     spawnEntities() {
@@ -244,29 +225,21 @@ class GameScene extends Phaser.Scene {
                 case 'F': this.addItem(x, y, 3); break;
                 case 'c': this.addItem(x, y, 0.2, 0, 'catnip'); break;
                 case 'k':
-                    this.cucumbers.push({ x, y, cool: 0, s: this.add.image(x, y, 'fc_cucumber').setDepth(4).setRotation(Math.random() * Math.PI) });
+                    this.cucumbers.push({ x, y, cool: 0, s: { rotation: Math.random() * Math.PI } });
                     break;
                 case 'h':
-                    this.add.image(x, y, 'fc_hole').setDepth(2);
                     this.holes.push({ x, y, t: 2 + Math.random() * 2, mice: [] });
                     break;
                 case 'G':
                     this.goal = { x, y };
-                    this.add.image(x, y, 'fc_house').setDepth(3);
-                    this.goalLabel = this.add.text(x, y - 46, 'GOAL', {
-                        fontFamily: FONT, fontSize: '20px', color: '#ffd166', fontStyle: 'bold',
-                        stroke: '#000', strokeThickness: 4
-                    }).setOrigin(0.5).setDepth(15);
-                    this.tweens.add({ targets: this.goalLabel, y: y - 52, yoyo: true, repeat: -1, duration: 600 });
                     break;
             }
         });
-        if (this.boss) this.goalLabel.setText(`${this.level.bossName}を倒せ`).setColor('#ff4d6d');
     }
 
     spawnProp(ch, x, y) {
         const def = FC.PROPS[ch];
-        const s = this.add.image(x, y, def.tex).setDepth(5).setRotation((Math.random() - 0.5) * 0.6);
+        const s = this.add.image(x, y, def.tex).setVisible(false).setRotation((Math.random() - 0.5) * 0.6);
         this.props.push({ x, y, s, def, alive: true });
     }
 
@@ -275,7 +248,7 @@ class GameScene extends Phaser.Scene {
         const e = this.enemies.create(x, y, def.tex);
         const r = def.bodyR || def.size / 2;
         e.body.setCircle(r, e.width / 2 - r, e.height / 2 - r);
-        e.setDepth(def.boss ? 9 : 6);
+        e.setVisible(false);
         e.kind = kind;
         e.def = def;
         e.size = def.size;
@@ -294,34 +267,17 @@ class GameScene extends Phaser.Scene {
     // kind: 'fish'（体重が増える）/ 'mouse'（仕留めたネズミ）/ 'catnip'（またたび）
     addItem(x, y, value, delay = 0, kind = 'fish') {
         const tex = kind === 'catnip' ? 'fc_catnip' : kind === 'mouse' ? 'fc_mouse' : value >= 3 ? 'fc_fish_gold' : 'fc_fish';
-        const s = this.add.image(x, y, tex).setDepth(4);
+        const s = this.add.image(x, y, tex).setVisible(false);
         s.setScale(kind === 'fish' ? Math.min(2.4, 0.6 + value * 0.25) : 1.1);
-        if (kind === 'mouse') s.setFlipY(true);
-        this.tweens.add({ targets: s, y: y - 4, yoyo: true, repeat: -1, duration: 500 + Math.random() * 300 });
-        const it = { s, value, kind, ready: this.stageTime + delay };
+        const it = { s, value, kind, drop: 0, ready: this.stageTime + delay };
         this.items.push(it);
         return it;
-    }
-
-    createSigns() {
-        const T = FC.TILE;
-        (this.level.signs || []).forEach(([x, y, text]) => {
-            this.add.text(x * T + 4, y * T + 4, text, {
-                fontFamily: FONT, fontSize: '16px', color: '#ffffff',
-                backgroundColor: '#000000aa', padding: { x: 8, y: 5 }, lineSpacing: 4
-            }).setDepth(14);
-        });
     }
 
     createVacuum() {
         const v = this.level.vacuum;
         if (!v) return;
         this.vac = { x: -140, speed: v.speed, delay: v.delay };
-        this.vacGfx = this.add.graphics().setDepth(20);
-        this.vacText = this.add.text(0, 0, '掃\n除\n機', {
-            fontFamily: FONT, fontSize: '40px', color: '#ff4d6d', fontStyle: 'bold',
-            stroke: '#000', strokeThickness: 6, align: 'center'
-        }).setOrigin(1, 0.5).setDepth(21);
     }
 
     setupInput() {
@@ -362,13 +318,6 @@ class GameScene extends Phaser.Scene {
         this.keys.ENTER.on('down', advance);
     }
 
-    setupCamera() {
-        const cam = this.cameras.main;
-        cam.setZoom(1.6);
-        cam.startFollow(this.catGfx, true, 0.12, 0.12);
-        cam.setBackgroundColor('#2a2018');
-    }
-
     say(text) {
         this.narration = { text, at: this.time.now };
     }
@@ -395,16 +344,15 @@ class GameScene extends Phaser.Scene {
             this.updateFishRain(dt);
             this.updateVacuum(dt);
             if (this.state === 'play') this.checkGoal();
-            this.updateCameraZoom(dt);
         }
-        this.renderCat(dt);
+        View3D.renderGame(dt);
     }
 
     updateCat(dt) {
         const c = this.cat;
         const k = this.keys;
         const p = this.input.activePointer;
-        const wp = this.cameras.main.getWorldPoint(p.x, p.y);
+        const wp = View3D.pointerWorld();
         c.aim = Math.atan2(wp.y - c.y, wp.x - c.x);
         c.invuln = Math.max(0, c.invuln - dt);
         c.punchT = Math.max(0, c.punchT - dt);
@@ -569,7 +517,7 @@ class GameScene extends Phaser.Scene {
         if (!onlyBoxes || !boxes.length) return false;
         boxes.forEach(([tx, ty]) => this.breakBox(tx, ty));
         SFX.play('boom');
-        this.cameras.main.shake(150, 0.01);
+        View3D.shake(150, 0.01);
         if (this.msgCooldown <= 0) {
             this.floatText(c.x, c.y - c.d / 2, 'ドーン!!', '#ffd166', 32);
             this.msgCooldown = 0.5;
@@ -653,7 +601,7 @@ class GameScene extends Phaser.Scene {
             c.vx = c.vy = c.kbx = c.kby = 0;
             SFX.play('stuck');
             SFX.play('meow');
-            this.cameras.main.shake(300, 0.012);
+            View3D.shake(300, 0.012);
             this.floatText(c.x, c.y - c.d / 2, '詰まった!!', '#ff4d6d', 30);
             this.say(NARRATOR.pick(NARRATOR.stuckStart));
         }
@@ -714,8 +662,7 @@ class GameScene extends Phaser.Scene {
         const c = this.cat;
         if (c.stuck || c.air) return;
         // ためた分だけ遠くへ。ただしカーソルより先には跳ばない
-        const p = this.input.activePointer;
-        const wp = this.cameras.main.getWorldPoint(p.x, p.y);
+        const wp = View3D.pointerWorld();
         const toCursor = Math.hypot(wp.x - c.x, wp.y - c.y);
         const dist = Math.max(30, Math.min(toCursor, FC.pounceMax(c.w) * (0.25 + 0.75 * charge)));
         this.startJump(c.aim, dist, false);
@@ -762,7 +709,7 @@ class GameScene extends Phaser.Scene {
         SFX.play('thud');
         const slam = c.w >= FC.SLAM_WEIGHT;
         if (slam) {
-            this.cameras.main.shake(200, 0.012);
+            View3D.shake(200, 0.012);
             this.floatText(c.x, c.y + c.d / 2, 'ドスン!!', '#ffd166', 26);
             this.explosion(c.x, c.y, c.d * 0.8, 0xc9a27e);
         }
@@ -789,6 +736,7 @@ class GameScene extends Phaser.Scene {
     // 棚の物を叩き落として割る
     knockOff(pr, angle) {
         pr.alive = false;
+        pr.flyAt = this.time.now;
         const tx = pr.x + Math.cos(angle) * 56, ty = pr.y + Math.sin(angle) * 56;
         this.tweens.add({
             targets: pr.s, x: tx, y: ty, angle: pr.s.angle + 400, duration: 320, ease: 'Quad.easeIn',
@@ -817,7 +765,7 @@ class GameScene extends Phaser.Scene {
             this.startJump(a, FC.SCARE_JUMP, true);
             c.scaredT = 1.2;
             SFX.play('hiss');
-            this.cameras.main.shake(150, 0.008);
+            View3D.shake(150, 0.008);
             this.floatText(c.x, c.y - c.d / 2 - 10, 'フギャーッ!!', '#ff4d6d', 28);
             this.sayOnce('scared', NARRATOR.scared);
         });
@@ -841,7 +789,7 @@ class GameScene extends Phaser.Scene {
             sy = c.y;
         }
         const h = this.hairballs.create(sx, sy, 'fc_hairball');
-        h.setScale(0.6 + amt * 0.15).setDepth(8);
+        h.setScale(0.6 + amt * 0.15).setVisible(false);
         h.amt = amt;
         h.life = 0.55;
         h.setVelocity(ca * 480, sa * 480);
@@ -905,8 +853,7 @@ class GameScene extends Phaser.Scene {
         }
         this.floatText(x, y - 60, `${this.level.bossName} ${eaten ? '丸のみ' : '撃破'}!!`, '#ffd166', 44);
         this.say(eaten ? 'ボスを食べる猫。前代未聞' : 'あとは痩せるだけ');
-        this.cameras.main.shake(500, 0.02);
-        this.goalLabel.setText('GOAL').setColor('#ffd166');
+        View3D.shake(500, 0.02);
     }
 
     eatEnemy(e) {
@@ -915,7 +862,7 @@ class GameScene extends Phaser.Scene {
         this.puff(e.x, e.y, e.size, 0xf4a340);
         e.destroy();
         SFX.play(gain >= 3 ? 'bigeat' : 'eat');
-        if (gain >= 3) this.cameras.main.shake(150, 0.006);
+        if (gain >= 3) View3D.shake(150, 0.006);
         this.floatText(this.cat.x, this.cat.y - this.cat.d / 2, `${gain >= 3 ? 'ゴクン' : 'ゲフッ'} +${gain}kg`, '#ffd166', gain >= 3 ? 26 : 18);
         if (isBoss) this.onBossDefeated(this.cat.x, this.cat.y, true);
         this.setWeight(this.cat.w + gain, 'eat');
@@ -930,7 +877,7 @@ class GameScene extends Phaser.Scene {
         c.kby = Math.sin(a) * 420;
         SFX.play('hurt');
         SFX.play('hiss');
-        this.cameras.main.shake(200, 0.01);
+        View3D.shake(200, 0.01);
         this.floatText(c.x, c.y - c.d / 2, `ガブッ -${dmg}kg`, '#ff4d6d', 22);
         this.setWeight(c.w - dmg, 'bitten');
     }
@@ -1112,10 +1059,8 @@ class GameScene extends Phaser.Scene {
             const x = (tx + 0.5) * FC.TILE, y = (ty + 0.5) * FC.TILE;
             if (this.gridAt(x + 40, y) !== G_FLOOR || this.gridAt(x - 40, y) !== G_FLOOR) continue;
             const it = this.addItem(x, y, Math.random() < 0.3 ? 3 : 1, 0.5);
-            this.tweens.killTweensOf(it.s);
-            it.s.y = y - 300;
-            it.s.setAlpha(0);
-            this.tweens.add({ targets: it.s, y, alpha: 1, duration: 450, ease: 'Quad.easeIn' });
+            it.drop = 1;
+            this.tweens.add({ targets: it, drop: 0, duration: 450, ease: 'Quad.easeIn' });
             return;
         }
     }
@@ -1133,28 +1078,6 @@ class GameScene extends Phaser.Scene {
                 if (this.cat.x - this.cat.d / 2 < v.x) this.die('vacuum');
             }
         }
-        const g = this.vacGfx;
-        const t = this.time.now / 1000;
-        g.clear();
-        if (v.x > 0) {
-            g.fillStyle(0x15121c, 0.97);
-            g.fillRect(0, 0, v.x - 30, this.worldH);
-            g.fillStyle(0x6b6b80);
-            g.fillRect(v.x - 34, 0, 34, this.worldH);
-            g.fillStyle(0x3a3a48);
-            for (let y = -40 + ((t * 120) % 40); y < this.worldH; y += 40) g.fillRect(v.x - 34, y, 34, 14);
-            g.fillStyle(0xff4d6d, 0.6 + Math.sin(t * 10) * 0.3);
-            g.fillRect(v.x - 4, 0, 4, this.worldH);
-        }
-        // 吸い込みの風
-        g.lineStyle(2, 0xffffff, 0.25);
-        for (let i = 0; i < 14; i++) {
-            const y = ((i * 97 + t * 30) % this.worldH);
-            const off = ((t * 400 + i * 53) % 260);
-            g.lineBetween(v.x + 260 - off, y, v.x + 230 - off, y);
-        }
-        const cam = this.cameras.main;
-        this.vacText.setPosition(Math.max(v.x - 40, cam.worldView.x + 70), cam.worldView.centerY);
     }
 
     checkGoal() {
@@ -1182,35 +1105,17 @@ class GameScene extends Phaser.Scene {
         this.deathLine = NARRATOR.death(reason, Save.data.deaths);
         this.say(this.deathLine);
         SFX.play(reason === 'fall' ? 'fall' : reason === 'burst' ? 'boom' : 'die');
-        const cam = this.cameras.main;
-        cam.shake(reason === 'burst' ? 800 : 400, reason === 'burst' ? 0.04 : 0.02);
-        cam.zoomTo(Math.min(2.2, cam.zoom * 1.4), 600, 'Cubic.easeOut');
+        View3D.shake(reason === 'burst' ? 800 : 400, reason === 'burst' ? 0.04 : 0.02);
         this.physics.pause();
-        const s = this.catGfx;
         const c = this.cat;
         c.air = null;
-        this.catShadow.setVisible(false);
-        if (reason === 'stuck' || reason === 'door') {
-            this.tweens.add({ targets: s, scaleY: 0.4, scaleX: 1.5, duration: 300, ease: 'Back.easeIn' });
-        } else if (reason === 'vacuum') {
-            this.tweens.add({ targets: s, x: s.x - 200, angle: s.angle - 720, scale: 0, duration: 700, ease: 'Cubic.easeIn' });
-        } else if (reason === 'fall') {
-            this.tweens.add({ targets: s, scale: 0, angle: s.angle + 360, duration: 900, ease: 'Cubic.easeIn' });
-        } else if (reason === 'burst') {
-            s.setVisible(false);
+        if (reason === 'burst') {
             this.explosion(c.x, c.y, c.d * 1.5);
-            for (let i = 0; i < 16; i++) {
-                const a = (i / 16) * Math.PI * 2;
-                const f = this.add.image(c.x, c.y, 'fc_fish').setDepth(26).setScale(1.5);
-                this.tweens.add({ targets: f, x: c.x + Math.cos(a) * 500, y: c.y + Math.sin(a) * 500, angle: 720, duration: 1200, ease: 'Cubic.easeOut' });
-            }
             this.enemies.getChildren().slice().forEach(e => {
                 if (Math.hypot(e.x - c.x, e.y - c.y) < c.d * 1.5) e.destroy();
             });
-        } else {
-            // ひっくり返る
-            this.tweens.add({ targets: s, scaleY: -1, alpha: 0.5, duration: 400 });
         }
+        View3D.catDeath(reason);
     }
 
     clearStage() {
@@ -1225,7 +1130,7 @@ class GameScene extends Phaser.Scene {
         SFX.play('meowHigh');
         this.say(NARRATOR.pick(NARRATOR.clear));
         this.physics.pause();
-        this.tweens.add({ targets: this.catGfx, scale: 1.15, yoyo: true, repeat: 3, duration: 180 });
+        View3D.catClear();
     }
 
     retry() {
@@ -1241,86 +1146,23 @@ class GameScene extends Phaser.Scene {
         }
     }
 
-    // ---------------------------------------------------------------- 描画
+    // ---------------------------------------------------------------- 演出（描画は View3D）
 
-    renderCat() {
-        if (this.state !== 'play') return;
-        const c = this.cat;
-        const g = this.catGfx;
-        const shape = CatArt.shape(c.w, c.d);
-        const h = c.air ? Math.sin((Math.PI * c.air.t) / c.air.dur) * c.air.peak : 0;
-        const breath = c.w >= FC.BURST_WARN ? Math.sin(this.time.now / 60) * 0.05 : 0;
-        CatArt.draw(g, {
-            ...shape,
-            t: this.time.now / 1000,
-            walk: c.walk,
-            crouch: c.crouch,
-            punch: c.punchT > 0 ? c.punchT / 0.14 : 0,
-            sleep: c.sleeping,
-            high: c.high > 0,
-            scared: c.scaredT > 0
-        });
-        const jitter = c.stuck ? (Math.random() - 0.5) * 4 : 0;
-        g.setPosition(c.x + jitter, c.y - h);
-        g.setRotation(c.heading);
-        g.setScale((1 + h / 120) * (1 + breath), (1 + h / 120) * (1 - breath));
-        g.setAlpha(c.invuln > 0 && !c.air && Math.floor(c.invuln * 12) % 2 ? 0.45 : 1);
-        this.catShadow.setPosition(c.x, c.y + c.d * 0.1);
-        this.catShadow.setSize(shape.L * 0.9 * (1 - h / 150), shape.W * 0.9 * (1 - h / 150));
-    }
-
-    // 軽いうちはズームイン、太るほど引いていく。またたび中は画面がゆれる
-    updateCameraZoom() {
-        const cam = this.cameras.main;
-        const target = Phaser.Math.Clamp(1.6 - (this.cat.w - 3) * 0.03, 0.45, 1.6);
-        cam.setZoom(cam.zoom + (target - cam.zoom) * 0.05);
-        cam.setRotation(this.cat.high > 0 ? Math.sin(this.stageTime * 1.7) * 0.06 : 0);
-        // マップが画面より小さいときは中央に表示する
-        const viewW = cam.width / cam.zoom, viewH = cam.height / cam.zoom;
-        const bw = Math.max(this.worldW, viewW), bh = Math.max(this.worldH, viewH);
-        cam.setBounds((this.worldW - bw) / 2, (this.worldH - bh) / 2, bw, bh);
-    }
-
-    // 猫パンチの爪あと
     clawMarks(x, y, angle, d) {
-        const g = this.add.graphics().setDepth(12).setPosition(x, y).setRotation(angle);
-        const len = Math.max(14, d * 0.5);
-        g.lineStyle(3, 0xffffff, 0.9);
-        for (let i = -1; i <= 1; i++) {
-            g.beginPath();
-            g.arc(-len * 0.3, i * len * 0.28, len * 0.6, -0.9, 0.9);
-            g.strokePath();
-        }
-        this.tweens.add({ targets: g, alpha: 0, scale: 1.3, duration: 220, onComplete: () => g.destroy() });
+        View3D.clawMarks(x, y, angle, d);
     }
 
     explosion(x, y, R, color = 0xff9f1c) {
         SFX.play('boom');
-        this.cameras.main.shake(120, 0.008);
-        const ring = this.add.circle(x, y, R, color, 0.6).setDepth(25).setScale(0.2);
-        this.tweens.add({ targets: ring, scale: 1, alpha: 0, duration: 280, onComplete: () => ring.destroy() });
-        this.puff(x, y, R * 0.8, 0xffd166);
+        View3D.shake(120, 0.008);
+        View3D.explosion(x, y, R, color);
     }
 
     floatText(x, y, text, color, size) {
-        const t = this.add.text(x, y, text, {
-            fontFamily: FONT, fontSize: `${size}px`, color, fontStyle: 'bold',
-            stroke: '#000000', strokeThickness: 4
-        }).setOrigin(0.5).setDepth(30);
-        this.tweens.add({ targets: t, y: y - 40, alpha: 0, duration: 900, ease: 'Cubic.easeOut', onComplete: () => t.destroy() });
+        View3D.floatText(x, y, text, color, size);
     }
 
     puff(x, y, size, color) {
-        for (let i = 0; i < 8; i++) {
-            const a = Math.random() * Math.PI * 2;
-            const p = this.add.image(x, y, 'fc_dot').setTint(color).setDepth(12).setScale(size / 40);
-            this.tweens.add({
-                targets: p,
-                x: x + Math.cos(a) * size * 0.8,
-                y: y + Math.sin(a) * size * 0.8,
-                alpha: 0, scale: 0.1, duration: 400,
-                onComplete: () => p.destroy()
-            });
-        }
+        View3D.puff(x, y, size, color);
     }
 }

@@ -7,8 +7,6 @@ class BootScene extends Phaser.Scene {
     create() {
         const g = this.make.graphics({ x: 0, y: 0, add: false });
 
-        this.drawCat(g);
-        this.drawGun(g);
         this.drawMouse(g);
         this.drawDog(g, 'fc_dog', 52, 0xb07840, 0x6b4423, false);
         this.drawDog(g, 'fc_bigdog', 92, 0x7a4e2a, 0x3f2512, false);
@@ -17,80 +15,15 @@ class BootScene extends Phaser.Scene {
         this.drawFish(g, 'fc_fish_gold', 0xc98a00, 0xffc93c, 0xfff1b8);
         this.drawRoomba(g);
         this.drawHairball(g);
-        this.drawBullet(g);
+        this.drawProps(g);
         this.drawHouse(g);
         this.drawHole(g);
         this.drawTiles(g);
+        this.extrudeTiles('fc_tiles', 'fc_tiles_x', 10);
         this.drawDot(g);
 
         g.destroy();
         this.scene.start('TitleScene');
-    }
-
-    drawCat(g) {
-        g.clear();
-        const outline = 0x3a2412;
-        // 耳
-        g.fillStyle(outline);
-        g.fillTriangle(20, 54, 34, 0, 64, 34);
-        g.fillTriangle(108, 54, 94, 0, 64, 34);
-        g.fillStyle(0xf4a340);
-        g.fillTriangle(26, 50, 37, 9, 60, 36);
-        g.fillTriangle(102, 50, 91, 9, 68, 36);
-        g.fillStyle(0xffb3c1);
-        g.fillTriangle(34, 44, 39, 20, 52, 38);
-        g.fillTriangle(94, 44, 89, 20, 76, 38);
-        // 体
-        g.fillStyle(outline);
-        g.fillCircle(64, 72, 55);
-        g.fillStyle(0xf4a340);
-        g.fillCircle(64, 72, 51);
-        g.fillStyle(0xffe0b0);
-        g.fillEllipse(64, 100, 64, 34);
-        // 縞
-        g.fillStyle(0xd9822b);
-        g.fillRect(60, 23, 8, 16);
-        g.fillRect(46, 28, 6, 12);
-        g.fillRect(76, 28, 6, 12);
-        g.fillRect(14, 64, 14, 5);
-        g.fillRect(14, 76, 12, 5);
-        g.fillRect(100, 64, 14, 5);
-        g.fillRect(102, 76, 12, 5);
-        // 目
-        g.fillStyle(0xffffff);
-        g.fillCircle(46, 62, 11);
-        g.fillCircle(82, 62, 11);
-        g.fillStyle(0x111111);
-        g.fillCircle(49, 63, 6);
-        g.fillCircle(85, 63, 6);
-        g.fillStyle(0xffffff);
-        g.fillCircle(51, 60, 2);
-        g.fillCircle(87, 60, 2);
-        // ほっぺ・鼻・口
-        g.fillStyle(0xff9aa8, 0.6);
-        g.fillEllipse(32, 82, 14, 8);
-        g.fillEllipse(96, 82, 14, 8);
-        g.fillStyle(0xff7a90);
-        g.fillTriangle(58, 76, 70, 76, 64, 83);
-        g.lineStyle(3, outline);
-        g.beginPath();
-        g.arc(58, 84, 6, 0, Math.PI, false);
-        g.strokePath();
-        g.beginPath();
-        g.arc(70, 84, 6, 0, Math.PI, false);
-        g.strokePath();
-        g.generateTexture('fc_cat', 128, 128);
-    }
-
-    drawGun(g) {
-        g.clear();
-        g.fillStyle(0x222222);
-        g.fillRect(0, 4, 38, 9);
-        g.fillRect(3, 10, 10, 10);
-        g.fillRect(36, 2, 10, 8);
-        g.fillStyle(0x777777);
-        g.fillRect(2, 6, 34, 3);
-        g.generateTexture('fc_gun', 48, 20);
     }
 
     drawMouse(g) {
@@ -223,15 +156,6 @@ class BootScene extends Phaser.Scene {
         g.generateTexture('fc_hairball', 28, 28);
     }
 
-    drawBullet(g) {
-        g.clear();
-        g.fillStyle(0xffb703);
-        g.fillCircle(6, 6, 6);
-        g.fillStyle(0xfff3b0);
-        g.fillCircle(6, 6, 3);
-        g.generateTexture('fc_bullet', 12, 12);
-    }
-
     drawHouse(g) {
         g.clear();
         g.fillStyle(0xf1e3c8);
@@ -257,25 +181,96 @@ class BootScene extends Phaser.Scene {
         g.generateTexture('fc_hole', 36, 20);
     }
 
+    drawProps(g) {
+        // 花瓶
+        g.clear();
+        g.fillStyle(0x1d4e89);
+        g.fillCircle(12, 12, 11);
+        g.fillStyle(0x3a86c8);
+        g.fillCircle(12, 12, 9);
+        g.fillStyle(0xf4f1e8);
+        g.fillCircle(12, 12, 4);
+        g.fillStyle(0xe63946);
+        g.fillCircle(9, 9, 3);
+        g.fillCircle(15, 10, 3);
+        g.fillStyle(0xffd166);
+        g.fillCircle(12, 15, 3);
+        g.generateTexture('fc_vase', 24, 24);
+        // マグカップ
+        g.clear();
+        g.fillStyle(0xdddddd);
+        g.fillRect(16, 7, 6, 6);
+        g.fillStyle(0x777777);
+        g.fillCircle(10, 10, 9);
+        g.fillStyle(0xffffff);
+        g.fillCircle(10, 10, 8);
+        g.fillStyle(0x5a3620);
+        g.fillCircle(10, 10, 6);
+        g.generateTexture('fc_mug', 24, 20);
+        // 観葉植物
+        g.clear();
+        g.fillStyle(0x8b5a2b);
+        g.fillCircle(13, 13, 10);
+        g.fillStyle(0x2d6a4f);
+        for (let i = 0; i < 6; i++) {
+            const a = (i / 6) * Math.PI * 2;
+            g.fillEllipse(13 + Math.cos(a) * 6, 13 + Math.sin(a) * 6, 10, 10);
+        }
+        g.fillStyle(0x52b788);
+        g.fillCircle(13, 13, 5);
+        g.generateTexture('fc_plant', 26, 26);
+        // スマホ
+        g.clear();
+        g.fillStyle(0x111111);
+        g.fillRoundedRect(0, 0, 14, 24, 3);
+        g.fillStyle(0x4cc9f0);
+        g.fillRect(2, 3, 10, 17);
+        g.fillStyle(0xffffff);
+        g.fillRect(4, 6, 6, 2);
+        g.generateTexture('fc_phone', 14, 24);
+        // きゅうり
+        g.clear();
+        g.fillStyle(0x1b4332);
+        g.fillEllipse(20, 7, 40, 13);
+        g.fillStyle(0x2d6a4f);
+        g.fillEllipse(20, 6, 36, 10);
+        g.fillStyle(0x74c69d);
+        for (let i = 0; i < 6; i++) g.fillCircle(6 + i * 6, 5 + (i % 2) * 3, 1);
+        g.generateTexture('fc_cucumber', 40, 14);
+        // またたび
+        g.clear();
+        g.fillStyle(0x6a994e);
+        for (let i = 0; i < 5; i++) {
+            const a = (i / 5) * Math.PI * 2;
+            g.fillEllipse(12 + Math.cos(a) * 6, 12 + Math.sin(a) * 6, 10, 7);
+        }
+        g.fillStyle(0xa7c957);
+        g.fillCircle(12, 12, 4);
+        g.generateTexture('fc_catnip', 24, 24);
+    }
+
+    // 家の中っぽいタイル
     drawTiles(g) {
         g.clear();
         const T = FC.TILE;
-        // 0: 床
-        g.fillStyle(0x2a2236);
-        g.fillRect(0, 0, T, T);
-        g.fillStyle(0x322a42);
-        g.fillRect(4, 4, 2, 2);
-        g.fillRect(20, 18, 2, 2);
+        const plank = (x, base, line, seam) => {
+            g.fillStyle(base);
+            g.fillRect(x, 0, T, T);
+            g.fillStyle(line);
+            for (let y = 0; y < T; y += 8) g.fillRect(x, y, T, 1);
+            g.fillRect(x + seam, 0, 1, 8);
+            g.fillRect(x + ((seam + 17) % T), 16, 1, 8);
+        };
+        // 0: フローリング
+        plank(0, 0x9c6b3f, 0x8a5c34, 5);
         // 1: 壁
-        g.fillStyle(0x4b3d63);
+        g.fillStyle(0xd9ccb0);
         g.fillRect(T, 0, T, T);
-        g.fillStyle(0x6a5890);
-        g.fillRect(T, 0, T, 5);
-        g.fillStyle(0x3a2f4d);
-        g.fillRect(T, 15, T, 2);
-        g.fillRect(T + 15, 5, 2, 10);
-        g.fillRect(T + 6, 17, 2, 15);
-        g.fillRect(T + 24, 17, 2, 15);
+        g.fillStyle(0xe8dec8);
+        g.fillRect(T + 2, 2, T - 4, T - 4);
+        g.fillStyle(0xcdbd9c);
+        g.fillRect(T + 8, 10, 2, 2);
+        g.fillRect(T + 22, 20, 2, 2);
         // 2: 体重計ドア（閉）
         g.fillStyle(0x5a1624);
         g.fillRect(T * 2, 0, T, T);
@@ -283,20 +278,14 @@ class BootScene extends Phaser.Scene {
         for (let i = 0; i < 4; i++) g.fillRect(T * 2 + 3 + i * 8, 0, 3, T);
         g.fillRect(T * 2, 14, T, 3);
         // 3: 体重計ドア（開）
-        g.fillStyle(0x2a2236);
-        g.fillRect(T * 3, 0, T, T);
+        plank(T * 3, 0x9c6b3f, 0x8a5c34, 5);
         g.fillStyle(0x3fdc7f);
-        for (let i = 0; i < 4; i++) g.fillRect(T * 3 + 3 + i * 8, 0, 3, 4);
-        g.fillRect(T * 3, 0, 2, T);
-        g.fillRect(T * 4 - 2, 0, 2, T);
-        // 4: 床（市松）
-        g.fillStyle(0x2e2640);
-        g.fillRect(T * 4, 0, T, T);
-        // 5: 薄い床
-        g.fillStyle(0x4a3a2a);
-        g.fillRect(T * 5, 0, T, T);
-        g.fillStyle(0x6b5540);
-        g.fillRect(T * 5 + 1, 1, T - 2, T - 2);
+        g.fillRect(T * 3, 0, 3, T);
+        g.fillRect(T * 4 - 3, 0, 3, T);
+        // 4: フローリング（継ぎ目違い）
+        plank(T * 4, 0x9f6e41, 0x8a5c34, 23);
+        // 5: 薄い床（傷んだ板）
+        plank(T * 5, 0x6e5a44, 0x4a3a2a, 9);
         g.lineStyle(1, 0x2a1f15);
         g.lineBetween(T * 5 + 4, 6, T * 5 + 14, 14);
         g.lineBetween(T * 5 + 14, 14, T * 5 + 26, 10);
@@ -304,8 +293,9 @@ class BootScene extends Phaser.Scene {
         // 6: 穴
         g.fillStyle(0x000000);
         g.fillRect(T * 6, 0, T, T);
-        g.fillStyle(0x140f1c);
-        g.fillRect(T * 6, 0, T, 5);
+        g.fillStyle(0x3a2a1a);
+        g.fillTriangle(T * 6, 0, T * 6 + 10, 0, T * 6, 8);
+        g.fillTriangle(T * 7, T, T * 7 - 12, T, T * 7, T - 6);
         // 7: 段ボール
         g.fillStyle(0x8a6436);
         g.fillRect(T * 7, 0, T, T);
@@ -313,17 +303,38 @@ class BootScene extends Phaser.Scene {
         g.fillRect(T * 7 + 2, 2, T - 4, T - 4);
         g.fillStyle(0xe8d9a8);
         g.fillRect(T * 7 + 13, 2, 6, T - 4);
-        g.lineStyle(2, 0x8a6436);
-        g.lineBetween(T * 7 + 4, 24, T * 7 + 10, 28);
         // 8: ひび割れ中の床
-        g.fillStyle(0x6b2a2a);
-        g.fillRect(T * 8, 0, T, T);
+        plank(T * 8, 0x6e3a2a, 0x4a2a1a, 9);
         g.lineStyle(2, 0x000000);
         g.lineBetween(T * 8 + 2, 4, T * 8 + 16, 16);
         g.lineBetween(T * 8 + 16, 16, T * 8 + 30, 6);
         g.lineBetween(T * 8 + 16, 16, T * 8 + 12, 30);
         g.lineBetween(T * 8 + 16, 16, T * 8 + 28, 26);
-        g.generateTexture('fc_tiles', T * 9, T);
+        // 9: 棚
+        g.fillStyle(0x4a2f18);
+        g.fillRect(T * 9, 0, T, T);
+        g.fillStyle(0x6b4423);
+        g.fillRect(T * 9 + 1, 1, T - 2, T - 2);
+        g.fillStyle(0x7d522b);
+        g.fillRect(T * 9 + 1, 1, T - 2, 4);
+        g.generateTexture('fc_tiles', T * 10, T);
+    }
+
+    // ズームや回転でタイルの境目に隣のタイルの色がにじまないよう、各タイルの縁を1px複製する
+    extrudeTiles(srcKey, dstKey, count) {
+        const T = FC.TILE;
+        const src = this.textures.get(srcKey).getSourceImage();
+        const tex = this.textures.createCanvas(dstKey, count * (T + 2), T + 2);
+        const ctx = tex.getContext();
+        for (let i = 0; i < count; i++) {
+            const sx = i * T, dx = i * (T + 2) + 1;
+            ctx.drawImage(src, sx, 0, T, T, dx, 1, T, T);
+            ctx.drawImage(src, sx, 0, 1, T, dx - 1, 1, 1, T);
+            ctx.drawImage(src, sx + T - 1, 0, 1, T, dx + T, 1, 1, T);
+            ctx.drawImage(tex.getSourceImage(), dx - 1, 1, T + 2, 1, dx - 1, 0, T + 2, 1);
+            ctx.drawImage(tex.getSourceImage(), dx - 1, T, T + 2, 1, dx - 1, T + 1, T + 2, 1);
+        }
+        tex.refresh();
     }
 
     drawDot(g) {

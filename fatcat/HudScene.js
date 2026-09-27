@@ -15,7 +15,7 @@ class HudScene extends Phaser.Scene {
         this.add.rectangle(10, 10, 330, 146, 0x000000, 0.55).setOrigin(0);
         this.stageText = this.add.text(22, 18, `STAGE ${this.gs.stageIndex + 1}  ${this.gs.level.name}`, st(18, '#ffd166'));
         this.weightText = this.add.text(22, 44, '', st(34));
-        this.weaponText = this.add.text(22, 90, '', st(18, '#8ecae6'));
+        this.damageText = this.add.text(22, 90, '', st(18, '#ff9aa8'));
         this.holeChips = [1, 2, 3].map((n, i) =>
             this.add.text(22 + i * 104, 122, '', { fontFamily: FONT, fontSize: '14px', color: '#000', fontStyle: 'bold', padding: { x: 6, y: 3 } })
         );
@@ -25,7 +25,7 @@ class HudScene extends Phaser.Scene {
         this.infoText = this.add.text(W - 20, 76, '', st(18, '#ffd166')).setOrigin(1, 0);
 
         this.add.text(W / 2, H - 14,
-            'WASD: 移動  マウス: ねらう(自動射撃)  SPACE/右クリック: 吐く  R: リトライ  ESC: タイトル  M: 音',
+            'WASD: 移動  クリック: 猫パンチ  長押し→離す: 飛びかかり  SPACE/右クリック: 吐く  E: 鳴く  R: リトライ  ESC: タイトル',
             { fontFamily: FONT, fontSize: '14px', color: '#bbbbbb', backgroundColor: '#00000099', padding: { x: 8, y: 4 } }
         ).setOrigin(0.5, 1);
 
@@ -66,8 +66,7 @@ class HudScene extends Phaser.Scene {
 
         this.weightText.setText(`体重 ${c.w.toFixed(1)} kg`);
         this.weightText.setColor(c.w >= FC.BURST_WARN ? '#ff4d6d' : '#ffffff');
-        const next = FC.WEAPONS[c.tier + 1];
-        this.weaponText.setText(`武器: ${FC.WEAPONS[c.tier].name}${next ? `（${next.min}kgで進化）` : ''}`);
+        this.damageText.setText(`被害総額 ¥${gs.damage.toLocaleString()}`);
         const names = ['小穴', '中穴', '大穴'];
         this.holeChips.forEach((chip, i) => {
             const max = FC.maxWeightForTiles(i + 1);
@@ -154,7 +153,7 @@ class HudScene extends Phaser.Scene {
             this.add.rectangle(0, 0, W, 300, 0x000000, 0.8),
             this.add.text(0, -90, last ? '完食!! 全ステージクリア' : 'STAGE CLEAR!', { fontFamily: FONT, fontSize: '60px', color: '#ffd166', fontStyle: 'bold', stroke: '#000', strokeThickness: 8 }).setOrigin(0.5),
             this.add.text(0, -16, `TIME ${this.gs.clearTime.toFixed(2)}s${this.gs.newBest ? '  (自己ベスト!)' : ''}   体重 ${this.gs.cat.w.toFixed(1)}kg`, { fontFamily: FONT, fontSize: '26px', color: '#ffffff' }).setOrigin(0.5),
-            this.add.text(0, 36, `天の声「${this.gs.narration ? this.gs.narration.text : ''}」   総死亡 ${Save.data.deaths} 回`, { fontFamily: FONT, fontSize: '22px', color: '#ff9aa8' }).setOrigin(0.5),
+            this.add.text(0, 36, `被害総額 ¥${this.gs.damage.toLocaleString()}   天の声「${this.gs.narration ? this.gs.narration.text : ''}」   総死亡 ${Save.data.deaths} 回`, { fontFamily: FONT, fontSize: '22px', color: '#ff9aa8' }).setOrigin(0.5),
             this.add.text(0, 96, last ? 'クリックでタイトルへ' : 'クリック / SPACE で次のステージ', { fontFamily: FONT, fontSize: '22px', color: '#bbbbbb' }).setOrigin(0.5)
         ]);
         this.tweens.add({ targets: c, alpha: 1, duration: 300 });

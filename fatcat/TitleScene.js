@@ -14,12 +14,13 @@ class TitleScene extends Phaser.Scene {
             this.tweens.add({ targets: f, x: f.x - 80, yoyo: true, repeat: -1, duration: 2000 + Math.random() * 2000 });
         }
 
-        // 太ったり痩せたりする猫
-        const cat = this.add.image(W / 2, 320, 'fc_cat').setScale(0.8);
-        this.tweens.add({ targets: cat, scale: 1.7, yoyo: true, repeat: -1, duration: 1400, ease: 'Sine.easeInOut' });
+        // 太ったり痩せたりする本物っぽい猫
+        this.cat = this.add.graphics().setPosition(W / 2, 330);
+        this.catWeight = { w: 5 };
+        this.tweens.add({ targets: this.catWeight, w: 60, yoyo: true, repeat: -1, duration: 2600, ease: 'Sine.easeInOut' });
 
         const big = (size, color) => ({ fontFamily: FONT, fontSize: `${size}px`, color, fontStyle: 'bold', stroke: '#000', strokeThickness: 8 });
-        this.add.text(W / 2, 80, 'デブ猫ガンナー', big(76, '#ffd166')).setOrigin(0.5);
+        this.add.text(W / 2, 80, 'デブ猫、詰まる。', big(76, '#ffd166')).setOrigin(0.5);
         this.add.text(W / 2, 150, '〜 太るほど強い。でも穴に詰まる。100kgで破裂する。〜', big(26, '#ffffff')).setOrigin(0.5);
 
         if (data && data.ending) {
@@ -41,12 +42,18 @@ class TitleScene extends Phaser.Scene {
             this.makeButton(x, 598 + row * 46, label, 16, open ? () => this.startStage(i) : null);
         });
 
-        this.add.text(W / 2, 700, `総死亡 ${Save.data.deaths} 回   最高体重 ${Save.data.maxWeight.toFixed(1)} kg   /   実況・動画投稿 大歓迎！`, {
+        this.add.text(W / 2, 700, `総死亡 ${Save.data.deaths} 回   最高体重 ${Save.data.maxWeight.toFixed(1)} kg   累計被害総額 ¥${(Save.data.damageTotal || 0).toLocaleString()}   /   実況・動画投稿 大歓迎！`, {
             fontFamily: FONT, fontSize: '18px', color: '#bbbbbb'
         }).setOrigin(0.5);
 
         this.input.keyboard.once('keydown-ENTER', () => this.startStage(unlocked));
         this.input.keyboard.once('keydown-SPACE', () => this.startStage(unlocked));
+    }
+
+    update(time) {
+        const w = this.catWeight.w;
+        const d = FC.diameter(w) * 0.9;
+        CatArt.draw(this.cat, { ...CatArt.shape(w, d), t: time / 1000, walk: time / 1000 * 0.6 });
     }
 
     makeButton(x, y, label, size, onClick) {

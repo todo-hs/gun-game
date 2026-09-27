@@ -20,32 +20,38 @@ const FC = {
     speed: w => Math.max(80, 240 - 5 * w),
     // 太るほど止まれない（大きいほど滑る）
     grip: w => (w < 20 ? 30 : Math.max(1.2, 30 * Math.pow(0.9, w - 20))),
-    bulletDamage: w => 4 + w,
-    bulletScale: w => Math.min(3, 0.8 + w * 0.05),
+    // 猫パンチ
+    PUNCH_COOLDOWN: 0.28,
+    punchDamage: w => 6 + w * 0.8,
+    punchReach: (w, d) => d / 2 + 26 + w * 0.3,
+    // 飛びかかり: 長押しでためて離す。太るほど飛べない
+    POUNCE_HOLD: 0.18,
+    POUNCE_CHARGE: 0.7,
+    pounceMax: w => Phaser.Math.Clamp(320 - 4 * w, 50, 320),
+    pounceDamage: w => 15 + w * 1.5,
+    SLAM_WEIGHT: 30,
+    SLEEP_AFTER: 6,
+    HIGH_TIME: 6,
+    SCARE_JUMP: 230,
     spitAmount: w => Math.max(1, Math.round(w * 0.12 * 10) / 10),
     // n マス幅の穴を通れる最大体重
     maxWeightForTiles: n => Math.floor(((n * 32 - 10) / 3 - 0.01) * 10) / 10,
 
-    // 体重で武器が進化する
-    WEAPONS: [
-        { min: 0,  name: 'ピストル',     interval: 0.28, pellets: 1, spread: 0.05, dmgMul: 1,    speed: 620 },
-        { min: 8,  name: 'ショットガン', interval: 0.5,  pellets: 5, spread: 0.55, dmgMul: 0.7,  speed: 600 },
-        { min: 18, name: 'マシンガン',   interval: 0.08, pellets: 1, spread: 0.18, dmgMul: 0.55, speed: 700 },
-        { min: 35, name: '魚ロケット',   interval: 0.55, pellets: 1, spread: 0.08, dmgMul: 2.5,  speed: 430, rocket: true }
-    ],
-    weaponTier(w) {
-        let t = 0;
-        this.WEAPONS.forEach((wp, i) => { if (w >= wp.min) t = i; });
-        return t;
+    // 棚の上の物（叩き落とすと被害総額が増える）
+    PROPS: {
+        v: { tex: 'fc_vase',  name: '花瓶',       price: 12000 },
+        u: { tex: 'fc_mug',   name: 'マグカップ', price: 1500 },
+        p: { tex: 'fc_plant', name: '観葉植物',   price: 4800 },
+        q: { tex: 'fc_phone', name: 'スマホ',     price: 98000 }
     },
 
     ENEMIES: {
-        mouse:  { tex: 'fc_mouse',  size: 14,  hp: 8,    speed: 115, eat: 0.6, drop: 0.5, dmg: 0 },
+        mouse:  { tex: 'fc_mouse',  size: 14,  hp: 8,    speed: 160, eat: 0.6, drop: 0.5, dmg: 0 },
         dog:    { tex: 'fc_dog',    size: 40,  hp: 45,   speed: 95,  eat: 3,   drop: 2,   dmg: 2 },
         bigdog: { tex: 'fc_bigdog', size: 72,  hp: 130,  speed: 80,  eat: 6,   drop: 4,   dmg: 3.5 },
-        boss:   { tex: 'fc_boss',   size: 150, hp: 700,  speed: 70,  eat: 20,  drop: 0,   dmg: 5, boss: true },
+        boss:   { tex: 'fc_boss',   size: 150, hp: 500,  speed: 70,  eat: 20,  drop: 0,   dmg: 5, boss: true },
         // ルンバは魚を吸って大きくなる（テクスチャ 300px、当たり半径 130 を基準にスケール）
-        roomba: { tex: 'fc_roomba', size: 180, hp: 3000, speed: 55,  eat: 15,  drop: 0,   dmg: 8, boss: true, bodyR: 130, maxSize: 260 }
+        roomba: { tex: 'fc_roomba', size: 180, hp: 2000, speed: 55,  eat: 15,  drop: 0,   dmg: 8, boss: true, bodyR: 130, maxSize: 260 }
     },
 
     DEATHS: {
@@ -69,11 +75,15 @@ const NARRATOR = {
     fall:   ['床「重い」', '体重を考えろ', '床が泣いていた'],
     burst:  ['食べすぎで破裂。当然の結果', '「おいしかった」が最後の言葉', '100kgの壁は越えられなかった'],
     stuckStart: ['あ、詰まった', 'はい詰まった', 'また詰まってる'],
+    scared: ['猫にきゅうりはダメ、絶対', 'きゅうりは天敵', '今の跳び方は世界記録'],
+    high:   ['またたびでキマってる', 'ニャハハハハ', '合法です'],
+    sleep:  ['寝た。この状況で', '猫は1日14時間寝る', 'スヤァ…'],
+    smash:  ['飼い主が泣いている', '猫はテーブルの物を落とす生き物', 'それ高いやつ'],
     clear:  ['よく痩せた', 'デブの勝利', 'ごちそうさまでした', '今の、たまたまでしょ'],
     start:  ['さあ、食え', '今日のテーマ：食べすぎ注意', '健康診断の前日です'],
     milestones: [
         [20, 'デブの自覚が芽生えた'],
-        [35, 'ロケット猫、誕生'],
+        [35, '動くのがめんどくさくなってきた'],
         [50, 'もはや猫ではない'],
         [70, '体重計が逃げ出した'],
         [85, 'パンパンです。破裂注意']
@@ -88,7 +98,7 @@ const NARRATOR = {
 };
 
 const Save = {
-    data: { unlocked: 0, deaths: 0, best: {}, maxWeight: 0 },
+    data: { unlocked: 0, deaths: 0, best: {}, maxWeight: 0, damageTotal: 0 },
     load() {
         try {
             const raw = localStorage.getItem('fatcat_save');
@@ -134,7 +144,7 @@ const SFX = {
         o.stop(t + dur + 0.02);
     },
 
-    noise(dur, vol = 0.08) {
+    noise(dur, vol = 0.08, highpass = 0) {
         const c = this.ctx;
         const buf = c.createBuffer(1, Math.floor(c.sampleRate * dur), c.sampleRate);
         const data = buf.getChannelData(0);
@@ -143,8 +153,39 @@ const SFX = {
         const g = c.createGain();
         g.gain.value = vol;
         src.buffer = buf;
-        src.connect(g).connect(c.destination);
+        if (highpass) {
+            const f = c.createBiquadFilter();
+            f.type = 'highpass';
+            f.frequency.value = highpass;
+            src.connect(f).connect(g).connect(c.destination);
+        } else {
+            src.connect(g).connect(c.destination);
+        }
         src.start();
+    },
+
+    // ノコギリ波をバンドパスに通して「ニャー」っぽくする
+    meow(pitch = 1) {
+        const c = this.ctx;
+        const t = c.currentTime;
+        const o = c.createOscillator();
+        const f = c.createBiquadFilter();
+        const g = c.createGain();
+        o.type = 'sawtooth';
+        o.frequency.setValueAtTime(420 * pitch, t);
+        o.frequency.linearRampToValueAtTime(620 * pitch, t + 0.18);
+        o.frequency.linearRampToValueAtTime(380 * pitch, t + 0.5);
+        f.type = 'bandpass';
+        f.Q.value = 4;
+        f.frequency.setValueAtTime(700, t);
+        f.frequency.linearRampToValueAtTime(1500, t + 0.2);
+        f.frequency.linearRampToValueAtTime(600, t + 0.5);
+        g.gain.setValueAtTime(0.0001, t);
+        g.gain.exponentialRampToValueAtTime(0.25, t + 0.05);
+        g.gain.exponentialRampToValueAtTime(0.0001, t + 0.55);
+        o.connect(f).connect(g).connect(c.destination);
+        o.start(t);
+        o.stop(t + 0.6);
     },
 
     play(name) {
@@ -168,6 +209,15 @@ const SFX = {
                 case 'jet': this.noise(0.2, 0.06); break;
                 case 'warn': this.tone(90, 70, 0.12, 'sine', 0.15); break;
                 case 'evolve': [392, 523, 659].forEach((f, i) => this.tone(f, f * 1.5, 0.1, 'square', 0.05, i * 0.07)); break;
+                case 'meow': this.meow(1); break;
+                case 'meowHigh': this.meow(1.4); break;
+                case 'hiss': this.noise(0.45, 0.12, 2500); break;
+                case 'swipe': this.noise(0.07, 0.08, 4000); break;
+                case 'thud': this.tone(140, 40, 0.2, 'sine', 0.2); this.noise(0.1, 0.06); break;
+                case 'shatter':
+                    this.noise(0.3, 0.12, 3000);
+                    [2400, 3100, 2700].forEach((f, i) => this.tone(f, f * 0.8, 0.08, 'triangle', 0.04, i * 0.05));
+                    break;
                 case 'clear':
                     [523, 659, 784, 1046].forEach((f, i) => this.tone(f, f, 0.14, 'square', 0.06, i * 0.1));
                     break;
